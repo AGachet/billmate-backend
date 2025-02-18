@@ -29,8 +29,8 @@ DO $$
 DECLARE
   user_id UUID;
 BEGIN
-  INSERT INTO public.users (id, is_active, firstname, lastname, email, password, flex_token, updated_at)
-  VALUES (gen_random_uuid(), TRUE, 'User', 'Guest', 'user@appguest.com', 'passwordNotUsed', NULL, NOW())
+  INSERT INTO public.users (id, is_active, firstname, lastname, email, password, updated_at)
+  VALUES (gen_random_uuid(), TRUE, 'User', 'Guest', 'user@appguest.com', 'passwordNotUsed', NOW())
   RETURNING id INTO user_id;
 
   ------

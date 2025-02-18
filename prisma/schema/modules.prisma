@@ -10,7 +10,7 @@ enum ModuleType {
 /**
  * Table
  */
-model Modules {
+model Module {
   id        Int        @id @default(autoincrement())
   name      String
   type      ModuleType
@@ -30,8 +30,8 @@ model RolesModules {
   moduleId  Int                                      @map("module_id")
   createdAt DateTime @default(now())                 @map("created_at")
 
-  role   Roles   @relation(fields: [roleId], references: [id], onDelete: Cascade)
-  module Modules @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  module Module @relation(fields: [moduleId], references: [id], onDelete: Cascade)
 
   @@unique([roleId, moduleId])
   @@map("roles_modules")

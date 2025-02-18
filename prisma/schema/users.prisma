@@ -8,29 +8,50 @@ enum Locale {
   @@map("locale")
 }
 
+enum TokenType {
+  ACCOUNT_VALIDATION
+  REFRESH
+  RESET
+
+  @@map("token_type")
+}
+
 /**
  * Table
  */
-model Users {
-  id          String    @id @default(cuid())
-  isActive    Boolean   @default(false)               @map("is_active")
-  firstname   String?
-  lastname    String?
-  email       String    @unique
-  password    String
-  lastLoginAt DateTime?                               @map("last_login_at")
-  createdAt   DateTime  @default(now())               @map("created_at")
-  updatedAt   DateTime  @updatedAt                    @map("updated_at")
-  flexToken   String?   @db.VarChar(5000)             @map("flex_token")
-  resetToken  String?   @db.VarChar(500)              @map("reset_token")
+model User {
+  id           String    @id @default(cuid())
+  isActive     Boolean   @default(false)               @map("is_active")
+  firstname    String?
+  lastname     String?
+  email        String    @unique
+  password     String
+  lastLoginAt  DateTime?                               @map("last_login_at")
+  createdAt    DateTime  @default(now())               @map("created_at")
+  updatedAt    DateTime  @updatedAt                    @map("updated_at")
 
   roles       UsersRoles[]
+  tokens      UserTokens[]
   preferences UsersPreferences?
 
   @@map("users")
 }
 
-model Roles {
+model UserTokens {
+  id          String    @id @default(cuid())
+  userId      String    @map("user_id")
+  token       String    @db.VarChar(500)
+  type        TokenType
+  expiresAt   DateTime? @map("expires_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("users_tokens")
+}
+
+model Role {
   id        Int      @id @default(autoincrement())
   name      String   @unique
   isActive  Boolean  @default(false)                  @map("is_active")
@@ -49,8 +70,8 @@ model UsersRoles {
   createdAt DateTime @default(now())                  @map("created_at")
   updatedAt DateTime @updatedAt                       @map("updated_at")
 
-  user      Users     @relation(fields: [userId], references: [id])
-  role      Roles     @relation(fields: [roleId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
+  role      Role     @relation(fields: [roleId], references: [id])
 
   @@id([userId, roleId])
   @@map("users_roles")
@@ -62,7 +83,7 @@ model UsersPreferences {
   avatarUrl String? @db.VarChar(255)                  @map("avatar_url")
   updatedAt DateTime @updatedAt                       @map("updated_at")
 
-  user      Users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   locale    Locale   @default(EN)
 
   @@map("users_preferences")

@@ -1,12 +1,19 @@
+/**
+ * Dependencies
+ */
 import { Injectable, LoggerService } from '@nestjs/common'
 import DailyRotateFile from 'winston-daily-rotate-file'
+import { EnvConfig } from '@configs/env/env.config'
 import * as winston from 'winston'
 import chalk from 'chalk'
 
+/**
+ * Declaration
+ */
 @Injectable()
 export class Logger implements LoggerService {
   private logger: winston.Logger
-
+  private env: EnvConfig
   private colorMap: Record<string, (text: string) => string> = {
     error: chalk.red,
     warn: chalk.yellow,
@@ -17,7 +24,7 @@ export class Logger implements LoggerService {
 
   constructor() {
     this.logger = winston.createLogger({
-      level: process.env.LOG_LEVEL || 'info',
+      level: this.env.get('LOG_LEVEL'),
       format: winston.format.combine(
         winston.format.timestamp(),
         winston.format.printf(({ level, message, timestamp, context, requestId }) => {
