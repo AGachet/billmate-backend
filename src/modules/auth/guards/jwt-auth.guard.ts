@@ -8,8 +8,7 @@ import { AuthGuard } from '@nestjs/passport'
  * Dependencies
  */
 import { AuthService } from '@modules/auth/services/auth.service'
-import { Logger } from '@common/services/logger.service'
-import { EnvConfig } from '@configs/env/env.config'
+import { Logger } from '@common/services/logger/logger.service'
 
 /**
  * Type
@@ -23,8 +22,7 @@ import type { Request, Response } from 'express'
 export class JwtAuthGuard extends AuthGuard('jwt') {
   constructor(
     private authService: AuthService,
-    private readonly logger: Logger,
-    private readonly env: EnvConfig
+    private readonly logger: Logger
   ) {
     super()
   }

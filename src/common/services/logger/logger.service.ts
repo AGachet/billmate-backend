@@ -3,7 +3,7 @@
  */
 import { Injectable, LoggerService } from '@nestjs/common'
 import DailyRotateFile from 'winston-daily-rotate-file'
-import { EnvConfig } from '@configs/env/env.config'
+import { EnvConfig } from '@configs/env/env.service'
 import * as winston from 'winston'
 import chalk from 'chalk'
 
@@ -13,7 +13,6 @@ import chalk from 'chalk'
 @Injectable()
 export class Logger implements LoggerService {
   private logger: winston.Logger
-  private env: EnvConfig
   private colorMap: Record<string, (text: string) => string> = {
     error: chalk.red,
     warn: chalk.yellow,
@@ -22,16 +21,20 @@ export class Logger implements LoggerService {
     verbose: chalk.cyan
   }
 
-  constructor() {
+  constructor(private readonly env: EnvConfig) {
+    const isProd = this.env.get('NODE_ENV') === 'production'
+
     this.logger = winston.createLogger({
-      level: this.env.get('LOG_LEVEL'),
+      level: isProd ? 'info' : 'debug',
       format: winston.format.combine(
         winston.format.timestamp(),
-        winston.format.printf(({ level, message, timestamp, context, requestId }) => {
+        winston.format.printf(({ level, message, timestamp, context, requestId, metadata }) => {
           const color = this.colorMap[level] || chalk.white
           const pid = process.pid
           const reqId = requestId ? `[REQ_ID:${requestId}]` : ''
-          return `[${chalk.gray(timestamp)}] [PID:${pid}] ${color(level.toUpperCase())} ${reqId} [${chalk.magenta(context || 'App')}] ${message}`
+          const metadataStr = metadata ? `\nMetadata: ${JSON.stringify(metadata)}` : ''
+
+          return `[${chalk.gray(timestamp)}] [PID:${pid}] ${color(level.toUpperCase())} ${reqId} [${chalk.magenta(context || 'App')}] ${message}${metadataStr}`
         })
       ),
       transports: [

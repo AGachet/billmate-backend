@@ -8,7 +8,7 @@ import { HealthCheckService, HealthCheck as HealthCheckDecorator, HealthCheckRes
  * Dependencies
  */
 import { AppHealthCheck } from '@modules/health/checks/app.health.check'
-import { Logger } from '@common/services/logger.service'
+import { Logger } from '@common/services/logger/logger.service'
 
 /**
  * Declaration
@@ -27,14 +27,12 @@ export class HealthService {
     try {
       const result = await this.health.check([
         () => this.appHealthCheck.isHealthy()
-        // TODO: Add other checks here
+        // TODO: Add database and memory checks here
       ])
-      this.logger.debug(`Health checks completed successfully - Status: ${result.status}`, 'HealthService')
+      this.logger.debug(`✅ Health checks passed - Status: ${result.status}`, 'HealthService')
       return result
     } catch (error) {
-      console.log(error)
-      this.logger.error('Health checks failed', error instanceof Error ? error.stack || 'No stack trace available' : 'No error stack', 'HealthService')
-
+      this.logger.error(`❌ Health checks failed: ${error.message}`, error.stack || JSON.stringify(error), 'HealthService')
       throw error
     }
   }

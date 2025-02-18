@@ -1,27 +1,24 @@
 /**
  * Resources
  */
+import { Injectable } from '@nestjs/common'
 import { z } from 'zod'
-
-/**
- * Dependencies
- */
-import { Logger } from '@common/services/logger.service'
 
 /**
  * Type
  */
-export type EnvConfigType = z.infer<ReturnType<typeof EnvConfig.getSchema>>
 import type { StringValue } from 'ms'
+type EnvConfigType = z.infer<typeof EnvConfig.schema>
 
 /**
  * Declaration
  */
+@Injectable()
 export class EnvConfig {
-  private readonly config: EnvConfigType
-  private static readonly logger = new Logger()
   private static instance: EnvConfig | null = null
-  private static readonly schema = z.object({
+  private readonly config: EnvConfigType
+
+  static readonly schema = z.object({
     // Server Configuration
     PORT: z.string().transform(Number).default('3500'),
 
@@ -49,36 +46,27 @@ export class EnvConfig {
     LOG_DIR: z.string().min(1)
   })
 
-  private constructor() {
+  constructor() {
+    if (EnvConfig.instance) return EnvConfig.instance
     this.config = this.validate()
+    EnvConfig.instance = this
   }
 
-  // Singleton pattern: returns the existing instance or creates a new one.
-  static getInstance(): EnvConfig {
-    if (!EnvConfig.instance) EnvConfig.instance = new EnvConfig()
-    return EnvConfig.instance
-  }
-
-  // Validates and parses environment variables
-  private validate() {
+  private validate(): EnvConfigType {
     try {
       return EnvConfig.schema.parse(process.env)
     } catch (error) {
       if (error instanceof z.ZodError) {
         const missingVariables = error.errors.map((err) => err.path.join('.'))
-        EnvConfig.logger.error(`Environment validation failed:\n${missingVariables.join('\n')}`)
+        console.error(`❌ Environment validation failed:\n${missingVariables.join('\n')}`)
         throw new Error(`Environment validation failed:\n${missingVariables.join('\n')}`)
       }
       throw error
     }
   }
 
-  // Returns an environment variable by key
+  // Get an environment variable by key
   get<K extends keyof EnvConfigType>(key: K): EnvConfigType[K] {
     return this.config[key]
-  }
-
-  static getSchema() {
-    return this.schema
   }
 }

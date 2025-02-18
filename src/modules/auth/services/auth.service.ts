@@ -3,17 +3,18 @@
  */
 import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common'
 import { JwtService } from '@nestjs/jwt'
+import { Response } from 'express'
 import * as bcrypt from 'bcrypt'
 import ms from 'ms'
-import { Response } from 'express'
 
 /**
  * Dependencies
  */
 import { PrismaService } from '@configs/prisma/prisma.service'
-import { Logger } from '@common/services/logger.service'
+import { Logger } from '@common/services/logger/logger.service'
 import { SignInDto } from '@modules/auth/dto/signin.dto'
-import { EnvConfig } from '@configs/env/env.config'
+import { EnvConfig } from '@configs/env/env.service'
+import { UserDefaults } from '@configs/db/user.config'
 
 /**
  * Type
@@ -28,6 +29,11 @@ interface TokenPayload {
 export interface AuthTokens {
   accessToken: string
   refreshToken: string
+}
+
+export interface SignUpResponse {
+  message: string
+  confirmationToken?: string // Only displayed in development
 }
 
 /**
@@ -45,6 +51,67 @@ export class AuthService {
   /**
    * End points methods
    */
+  async signUp(email: string, password: string, firstname: string, lastname: string): Promise<SignUpResponse> {
+    this.logger.debug(`Sign-up attempt for ${email}`, 'signUp')
+
+    // Check if the user already exists
+    const existingUser = await this.prisma.user.findUnique({ where: { email } })
+    if (existingUser) {
+      this.logger.warn(`Email already exists: ${email}`, 'signUp')
+      throw new BadRequestException('Email already exists')
+    }
+
+    // Hash the password
+    const hashedPassword = await bcrypt.hash(password, 10)
+
+    // Create the user (inactive by default)
+    const user = await this.prisma.user.create({
+      data: {
+        email,
+        firstname,
+        lastname,
+        password: hashedPassword,
+        isActive: false
+      }
+    })
+
+    // Generate the confirmation token
+    const confirmationToken = this.jwtService.sign(
+      { email: user.email, sub: user.id },
+      {
+        secret: this.env.get('JWT_SECRET_CONFIRM_ACCOUNT'),
+        expiresIn: this.env.get('JWT_CREATE_ACCOUNT_EXPIRES_IN')
+      }
+    )
+
+    // Save the token in the database
+    await this.prisma.userTokens.create({
+      data: {
+        userId: user.id,
+        token: confirmationToken,
+        type: 'ACCOUNT_VALIDATION',
+        expiresAt: new Date(Date.now() + ms(this.env.get('JWT_CREATE_ACCOUNT_EXPIRES_IN')))
+      }
+    })
+
+    // Log the token in development
+    if (this.env.get('NODE_ENV') === 'development') {
+      this.logger.debug(`User created successfully. \n\n------ Confirmation token for ${email} ------ \n${confirmationToken}\n`, 'signUp')
+      return {
+        message: 'User created successfully. Please check your email to activate your account.',
+        confirmationToken // Only displayed in development
+      }
+    }
+
+    // TODO: Send the email with the token
+    // await this.mailService.sendConfirmationEmail(email, confirmationToken)
+
+    this.logger.debug(`Sign-up successful for ${email}`, 'signUp')
+    return {
+      message: 'User created successfully. Please check your email to activate your account.'
+    }
+  }
+
   async signIn({ email, password, confirmAccountToken }: SignInDto): Promise<AuthTokens> {
     this.logger.debug(`Sign-in attempt for ${email}`, 'signIn')
 
@@ -119,10 +186,22 @@ export class AuthService {
       throw new BadRequestException('Invalid confirmation token')
     }
 
-    // Update user
+    // Update user with isActive status, default role and create default preferences
     const updatedUser = await this.prisma.user.update({
       where: { email },
-      data: { isActive: true }
+      data: {
+        isActive: true,
+        roles: {
+          create: {
+            roleId: UserDefaults.roles.default
+          }
+        },
+        preferences: {
+          create: {
+            locale: UserDefaults.preferences.locale
+          }
+        }
+      }
     })
 
     // Delete the token after activation

@@ -8,6 +8,7 @@ module.exports = {
   },
   moduleNameMapper: {
     '^@modules/(.*)$': '<rootDir>/modules/$1',
+    '^@configs/(.*)$': '<rootDir>/configs/$1',
     '^@common/(.*)$': '<rootDir>/common/$1'
   }
 }

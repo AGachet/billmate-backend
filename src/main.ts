@@ -10,21 +10,21 @@ import { ValidationPipe } from '@nestjs/common'
  * Dependencies
  */
 import { AppModule } from './app.module'
-import { EnvConfig } from '@configs/env/env.config'
-import { Logger } from '@common/services/logger.service'
+import { EnvConfig } from '@configs/env/env.service'
+import { Logger } from '@common/services/logger/logger.service'
 import { GlobalExceptionFilter } from '@common/filters/global-exception.filter'
 
 /**
  * Declaration
  */
 const bootstrap = async () => {
-  const env = EnvConfig.getInstance()
   const app = await NestFactory.create(AppModule)
+  const env = app.get(EnvConfig)
   const logger = app.get(Logger)
 
   app.setGlobalPrefix(env.get('API_PREFIX'))
   app.useGlobalFilters(new GlobalExceptionFilter(logger))
-  app.useGlobalPipes(new ValidationPipe({ transform: true }))
+  app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }))
 
   await app.listen(env.get('PORT'))
 
@@ -32,7 +32,6 @@ const bootstrap = async () => {
 }
 
 bootstrap().catch((error) => {
-  const logger = new Logger()
-  logger.error('Failed to start application:', error, 'Bootstrap')
+  console.error('❌ Failed to start application:', error)
   process.exit(1)
 })

@@ -8,8 +8,7 @@ import { PassportModule } from '@nestjs/passport'
 /**
  * Dependencies
  */
-import { EnvConfig } from '@configs/env/env.config'
-import { Logger } from '@common/services/logger.service'
+import { EnvConfig } from '@configs/env/env.service'
 import { PrismaService } from '@configs/prisma/prisma.service'
 import { AuthService } from '@modules/auth/services/auth.service'
 import { AuthController } from '@modules/auth/controllers/auth.controller'
@@ -31,16 +30,8 @@ import { AuthController } from '@modules/auth/controllers/auth.controller'
       inject: [EnvConfig]
     })
   ],
-  providers: [
-    {
-      provide: EnvConfig,
-      useFactory: () => EnvConfig.getInstance()
-    },
-    AuthService,
-    PrismaService,
-    Logger
-  ],
+  providers: [AuthService, PrismaService],
   controllers: [AuthController],
-  exports: [AuthService, EnvConfig]
+  exports: [AuthService]
 })
 export class AuthModule {}
