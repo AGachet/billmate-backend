@@ -6,7 +6,7 @@ import { Global, Module } from '@nestjs/common'
 /**
  * Dependencies
  */
-import { PrismaService } from '@configs/prisma/prisma.service'
+import { PrismaService } from '@configs/prisma/services/prisma.service'
 
 /**
  * Declaration

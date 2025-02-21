@@ -10,16 +10,20 @@ import ms from 'ms'
 /**
  * Dependencies
  */
-import { PrismaService } from '@configs/prisma/prisma.service'
+import { PrismaService } from '@configs/prisma/services/prisma.service'
 import { Logger } from '@common/services/logger/logger.service'
-import { SignInDto } from '@modules/auth/dto/signin.dto'
-import { EnvConfig } from '@configs/env/env.service'
+import { EnvConfig } from '@configs/env/services/env.service'
 import { UserDefaults } from '@configs/db/user.config'
 
 /**
  * Type
  */
-import type { User } from '@prisma/client'
+import type { User, UserToken } from '@prisma/client'
+import type { SignUpDto } from '@modules/auth/dto/signup.dto'
+import type { SignInDto } from '@modules/auth/dto/signin.dto'
+import type { SignOutDto } from '@modules/auth/dto/signout.dto'
+import type { ResetPasswordDto } from '@modules/auth/dto/reset-password.dto'
+import type { RequestPasswordResetDto } from '@modules/auth/dto/request-password-reset.dto'
 
 interface TokenPayload {
   email: string
@@ -34,6 +38,23 @@ export interface AuthTokens {
 export interface SignUpResponse {
   message: string
   confirmationToken?: string // Only displayed in development
+}
+
+export interface SignInResponse {
+  userId: string
+}
+
+export interface SignOutResponse {
+  message: string
+}
+
+export interface RequestPasswordResetResponse {
+  message: string
+  resetToken?: string // Only displayed in development
+}
+
+export interface ResetPasswordResponse {
+  message: string
 }
 
 /**
@@ -51,7 +72,9 @@ export class AuthService {
   /**
    * End points methods
    */
-  async signUp(email: string, password: string, firstname: string, lastname: string): Promise<SignUpResponse> {
+  async signUp(signUpDto: SignUpDto): Promise<SignUpResponse> {
+    const { email, password, firstname, lastname } = signUpDto
+
     this.logger.debug(`Sign-up attempt for ${email}`, 'signUp')
 
     // Check if the user already exists
@@ -85,7 +108,7 @@ export class AuthService {
     )
 
     // Save the token in the database
-    await this.prisma.userTokens.create({
+    await this.prisma.userToken.create({
       data: {
         userId: user.id,
         token: confirmationToken,
@@ -112,7 +135,9 @@ export class AuthService {
     }
   }
 
-  async signIn({ email, password, confirmAccountToken }: SignInDto): Promise<AuthTokens> {
+  async signIn(signInDto: SignInDto): Promise<SignInResponse & AuthTokens> {
+    const { email, password, confirmAccountToken } = signInDto
+
     this.logger.debug(`Sign-in attempt for ${email}`, 'signIn')
 
     // Validate user
@@ -131,22 +156,185 @@ export class AuthService {
     })
 
     this.logger.debug(`Sign-in attempt successfully for ${email}`, 'signIn')
-    return { accessToken, refreshToken }
+    return { accessToken, refreshToken, userId: user.id }
   }
 
-  async signOut(userId: string): Promise<{ message: string }> {
+  async signOut(signOutDto: SignOutDto): Promise<SignOutResponse> {
+    const { userId } = signOutDto
+
     this.logger.debug(`Logging out user with ID: ${userId}`, 'signout')
 
     // Delete refresh tokens from the database
-    await this.prisma.userTokens.deleteMany({
+    await this.prisma.userToken.deleteMany({
       where: {
         userId,
-        type: 'REFRESH'
+        type: 'SESSION_REFRESH'
       }
     })
 
     this.logger.debug(`User ${userId} logged out successfully`, 'signOut')
     return { message: 'Logged out successfully' }
+  }
+
+  async requestPasswordReset(requestPasswordResetDto: RequestPasswordResetDto): Promise<RequestPasswordResetResponse> {
+    const { email } = requestPasswordResetDto
+
+    this.logger.debug(`Password reset requested for ${email}`, 'requestPasswordReset')
+
+    // Get user with roles and check access in one query
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+      include: {
+        rolesLinked: {
+          include: {
+            role: {
+              include: {
+                modulesLinked: {
+                  where: {
+                    module: {
+                      name: 'USER_ACCOUNT_PASSWORD_RECOVERY'
+                    }
+                  }
+                },
+                permissionsLinked: {
+                  where: {
+                    permission: {
+                      name: 'PASSWORD_RECOVERY_LINK_REQUEST_OWN'
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    })
+
+    if (!user) {
+      this.logger.warn(`User not found: ${email}`, 'requestPasswordReset')
+      throw new BadRequestException('User not found')
+    }
+
+    // Check if user has access to password reset
+    const hasModuleAccess = user.rolesLinked.some((userRole) => userRole.role.modulesLinked.length > 0)
+    const hasPermission = user.rolesLinked.some((userRole) => userRole.role.permissionsLinked.length > 0)
+
+    if (!hasModuleAccess || !hasPermission) {
+      this.logger.warn(`User ${email} does not have access to password reset`, 'requestPasswordReset')
+      throw new UnauthorizedException('You do not have permission to reset passwords')
+    }
+
+    // Generate reset token
+    const resetToken = this.jwtService.sign(
+      { email: user.email, sub: user.id },
+      {
+        secret: this.env.get('JWT_SECRET_RESET_PASSWORD'),
+        expiresIn: this.env.get('JWT_RESET_PASSWORD_EXPIRES_IN')
+      }
+    )
+
+    // Save token in database
+    await this.prisma.userToken.create({
+      data: {
+        userId: user.id,
+        token: resetToken,
+        type: 'PASSWORD_RESET',
+        expiresAt: new Date(Date.now() + ms(this.env.get('JWT_RESET_PASSWORD_EXPIRES_IN')))
+      }
+    })
+
+    // Return token in development
+    if (this.env.get('NODE_ENV') === 'development') {
+      return {
+        message: 'Password reset link has been sent to your email.',
+        resetToken // Only in development
+      }
+    }
+
+    // TODO: Send email with reset link
+    this.logger.debug(`Password reset link sent to ${email}`, 'requestPasswordReset')
+    return { message: 'Password reset link has been sent to your email.' }
+  }
+
+  async resetPassword(resetPasswordDto: ResetPasswordDto): Promise<ResetPasswordResponse> {
+    const { resetPasswordToken, password, confirmPassword } = resetPasswordDto
+
+    this.logger.debug('Password reset attempt', 'resetPassword')
+
+    if (password !== confirmPassword) {
+      this.logger.warn('Passwords do not match', 'resetPassword')
+      throw new BadRequestException('Passwords do not match')
+    }
+
+    const payload = await this.verifyToken(resetPasswordToken, this.env.get('JWT_SECRET_RESET_PASSWORD'))
+
+    // Get token record and check access in one query
+    const tokenRecord = await this.prisma.userToken.findFirst({
+      where: {
+        userId: payload.sub,
+        token: resetPasswordToken,
+        type: 'PASSWORD_RESET'
+      },
+      include: {
+        user: {
+          include: {
+            rolesLinked: {
+              include: {
+                role: {
+                  include: {
+                    modulesLinked: {
+                      where: {
+                        module: {
+                          name: 'USER_ACCOUNT_PASSWORD_RECOVERY'
+                        }
+                      }
+                    },
+                    permissionsLinked: {
+                      where: {
+                        permission: {
+                          name: 'PASSWORD_RECOVERY_RESET_OWN'
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    })
+
+    if (!tokenRecord) {
+      this.logger.warn(`Invalid or expired reset password token for ${payload.email}`, 'resetPassword')
+      throw new BadRequestException('Invalid or expired reset password token')
+    }
+
+    // Check if user has access to password reset
+    const hasModuleAccess = tokenRecord.user.rolesLinked.some((userRole) => userRole.role.modulesLinked.length > 0)
+    const hasPermission = tokenRecord.user.rolesLinked.some((userRole) => userRole.role.permissionsLinked.length > 0)
+
+    if (!hasModuleAccess || !hasPermission) {
+      this.logger.warn(`User ${payload.email} does not have access to password reset`, 'resetPassword')
+      throw new UnauthorizedException('You do not have permission to reset passwords')
+    }
+
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(password, 10)
+
+    // Update password
+    await this.prisma.user.update({
+      where: { id: payload.sub },
+      data: { password: hashedPassword }
+    })
+
+    // Delete used token
+    await this.prisma.userToken.delete({
+      where: { id: tokenRecord.id }
+    })
+
+    this.logger.debug(`Password reset successfully for ${payload.email}`, 'resetPassword')
+    return { message: 'Password has been reset successfully' }
   }
 
   /**
@@ -173,7 +361,7 @@ export class AuthService {
     await this.verifyToken(confirmAccountToken, this.env.get('JWT_SECRET_CONFIRM_ACCOUNT'))
 
     // Find the token record
-    const tokenRecord = await this.prisma.userTokens.findFirst({
+    const tokenRecord = await this.prisma.userToken.findFirst({
       where: {
         userId,
         token: confirmAccountToken,
@@ -191,12 +379,12 @@ export class AuthService {
       where: { email },
       data: {
         isActive: true,
-        roles: {
+        rolesLinked: {
           create: {
             roleId: UserDefaults.roles.default
           }
         },
-        preferences: {
+        preference: {
           create: {
             locale: UserDefaults.preferences.locale
           }
@@ -205,7 +393,7 @@ export class AuthService {
     })
 
     // Delete the token after activation
-    await this.prisma.userTokens.delete({
+    await this.prisma.userToken.delete({
       where: { id: tokenRecord.id }
     })
 
@@ -213,24 +401,34 @@ export class AuthService {
     return updatedUser
   }
 
-  private async generateTokens(user: { email: string; id: string }): Promise<AuthTokens> {
+  private async generateTokens(user: { email: string; id: string }, existingTokenRecord?: UserToken): Promise<AuthTokens> {
     const payload: TokenPayload = { email: user.email, sub: user.id }
 
     // Default secret and expiresIn for access token (from auth.module.ts)
     const accessToken = this.jwtService.sign(payload)
 
-    // Custom secret and expiresIn for refresh token
+    // Check if the refresh token exists and is still valid
+    if (existingTokenRecord?.expiresAt) {
+      const remainingTime = existingTokenRecord.expiresAt.getTime() - Date.now()
+      const oneDay = 24 * 60 * 60 * 1000 // 24 hours in milliseconds
+
+      if (remainingTime > oneDay) {
+        return { accessToken, refreshToken: existingTokenRecord.token }
+      }
+    }
+
+    // Generate new refresh token if needed
     const refreshToken = this.jwtService.sign(payload, {
       secret: this.env.get('JWT_SECRET_REFRESH'),
       expiresIn: this.env.get('JWT_REFRESH_EXPIRES_IN')
     })
 
-    // Store the refresh token in the UserTokens table
-    await this.prisma.userTokens.create({
+    // Store the new refresh token in the UserTokens table
+    await this.prisma.userToken.create({
       data: {
         userId: user.id,
         token: refreshToken,
-        type: 'REFRESH',
+        type: 'SESSION_REFRESH',
         expiresAt: new Date(Date.now() + ms(this.env.get('JWT_REFRESH_EXPIRES_IN')))
       }
     })
@@ -268,11 +466,11 @@ export class AuthService {
   async refreshTokens(refreshToken: string): Promise<AuthTokens> {
     const payload = await this.verifyToken(refreshToken, this.env.get('JWT_SECRET_REFRESH'))
 
-    const tokenRecord = await this.prisma.userTokens.findFirst({
+    const tokenRecord = await this.prisma.userToken.findFirst({
       where: {
         userId: payload.sub,
         token: refreshToken,
-        type: 'REFRESH'
+        type: 'SESSION_REFRESH'
       }
     })
 
@@ -281,7 +479,7 @@ export class AuthService {
       throw new UnauthorizedException('Invalid refresh token')
     }
 
-    return this.generateTokens({ id: payload.sub, email: payload.email })
+    return this.generateTokens({ id: payload.sub, email: payload.email }, tokenRecord)
   }
 
   setAuthCookies(response: Response, accessToken: string, refreshToken: string): void {

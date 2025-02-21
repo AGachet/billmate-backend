@@ -10,34 +10,38 @@ enum Locale {
 
 enum TokenType {
   ACCOUNT_VALIDATION
-  REFRESH
-  RESET
+  SESSION_REFRESH
+  PASSWORD_RESET
 
   @@map("token_type")
 }
 
 /**
- * Table
+ * Table : User
  */
 model User {
   id           String    @id @default(cuid())
   isActive     Boolean   @default(false)               @map("is_active")
-  firstname    String?
-  lastname     String?
-  email        String    @unique
-  password     String
+  firstname    String?   @db.VarChar(30)
+  lastname     String?   @db.VarChar(30)
+  email        String    @unique @db.VarChar(100)
+  password     String    @db.VarChar(255)
   lastLoginAt  DateTime?                               @map("last_login_at")
   createdAt    DateTime  @default(now())               @map("created_at")
   updatedAt    DateTime  @updatedAt                    @map("updated_at")
 
-  roles       UsersRoles[]
-  tokens      UserTokens[]
-  preferences UsersPreferences?
+  tokens       UserToken[]
+  rolesLinked  UserRoleLink[]
+  preference   UserPreference?
 
+  @@index([isActive])
   @@map("users")
 }
 
-model UserTokens {
+/**
+ * Table : User Token
+ */
+model UserToken {
   id          String    @id @default(cuid())
   userId      String    @map("user_id")
   token       String    @db.VarChar(500)
@@ -48,23 +52,47 @@ model UserTokens {
 
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@map("users_tokens")
+  @@index([userId])
+  @@map("user_tokens")
 }
 
+/**
+ * Table : Role
+ */
 model Role {
   id        Int      @id @default(autoincrement())
-  name      String   @unique
+  name      String   @unique @db.VarChar(30)
   isActive  Boolean  @default(false)                  @map("is_active")
   createdAt DateTime @default(now())                  @map("created_at")
   updatedAt DateTime @updatedAt                       @map("updated_at")
 
-  users      UsersRoles[]
-  modules    RolesModules[]
+  usersLinked       UserRoleLink[]
+  modulesLinked     RoleModuleLink[]
+  permissionsLinked RolePermissionLink[]
 
   @@map("roles")
 }
 
-model UsersRoles {
+
+/**
+ * Table : User Preferences
+ */
+model UserPreference {
+  id        Int     @id @default(autoincrement())
+  userId    String  @unique                           @map("user_id")
+  avatarUrl String? @db.VarChar(255)                  @map("avatar_url")
+  updatedAt DateTime @updatedAt                       @map("updated_at")
+
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  locale    Locale  @default(FR)
+
+  @@map("user_preferences")
+}
+
+/**
+ * Table : Relation User - Roles
+ */
+model UserRoleLink {
   userId    String                                    @map("user_id")
   roleId    Int                                       @map("role_id")
   createdAt DateTime @default(now())                  @map("created_at")
@@ -74,17 +102,7 @@ model UsersRoles {
   role      Role     @relation(fields: [roleId], references: [id])
 
   @@id([userId, roleId])
-  @@map("users_roles")
-}
-
-model UsersPreferences {
-  id        Int     @id @default(autoincrement())
-  userId    String  @unique                           @map("user_id")
-  avatarUrl String? @db.VarChar(255)                  @map("avatar_url")
-  updatedAt DateTime @updatedAt                       @map("updated_at")
-
-  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  locale    Locale   @default(EN)
-
-  @@map("users_preferences")
+  @@index([userId])
+  @@index([roleId])
+  @@map("users_roles_links")
 }

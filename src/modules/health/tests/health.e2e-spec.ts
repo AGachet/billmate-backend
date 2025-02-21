@@ -15,7 +15,7 @@ import { LoggerModule } from '@common/services/logger/logger.module'
 /**
  * Mocks
  */
-jest.mock('@configs/env/env.service', () => ({
+jest.mock('@configs/env/services/env.service', () => ({
   EnvService: jest.fn().mockImplementation(() => ({
     get: jest.fn().mockImplementation((key: string) => {
       switch (key) {

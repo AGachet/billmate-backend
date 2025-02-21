@@ -1,11 +1,9 @@
-export enum UserRoles {
+enum UserRoles {
   GUEST = 1,
-  USER = 2,
-  ADMIN = 3,
-  SUPERADMIN = 4
+  USER = 2
 }
 
-export enum Locales {
+enum Locales {
   FR = 'FR',
   EN = 'EN'
 }

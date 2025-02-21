@@ -10,7 +10,7 @@ import { ValidationPipe } from '@nestjs/common'
  * Dependencies
  */
 import { AppModule } from './app.module'
-import { EnvConfig } from '@configs/env/env.service'
+import { EnvConfig } from '@configs/env/services/env.service'
 import { Logger } from '@common/services/logger/logger.service'
 import { GlobalExceptionFilter } from '@common/filters/global-exception.filter'
 

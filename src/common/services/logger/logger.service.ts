@@ -3,7 +3,7 @@
  */
 import { Injectable, LoggerService } from '@nestjs/common'
 import DailyRotateFile from 'winston-daily-rotate-file'
-import { EnvConfig } from '@configs/env/env.service'
+import { EnvConfig } from '@configs/env/services/env.service'
 import * as winston from 'winston'
 import chalk from 'chalk'
 

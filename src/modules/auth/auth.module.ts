@@ -8,8 +8,8 @@ import { PassportModule } from '@nestjs/passport'
 /**
  * Dependencies
  */
-import { EnvConfig } from '@configs/env/env.service'
-import { PrismaService } from '@configs/prisma/prisma.service'
+import { EnvConfig } from '@configs/env/services/env.service'
+import { PrismaService } from '@configs/prisma/services/prisma.service'
 import { AuthService } from '@modules/auth/services/auth.service'
 import { AuthController } from '@modules/auth/controllers/auth.controller'
 

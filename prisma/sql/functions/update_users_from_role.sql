@@ -18,12 +18,12 @@ BEGIN
   IF NEW.is_active = false THEN
 
     SELECT COUNT(user_id) INTO v_users
-      FROM public.link_users_roles
+      FROM public.users_roles_links
       WHERE role_id = NEW.id
     AND user_id IN (
       SELECT user_id
-      FROM public.link_users_roles
-      INNER JOIN public.roles ON public.roles.id = public.link_users_roles.role_id
+      FROM public.users_roles_links
+      INNER JOIN public.roles ON public.roles.id = public.users_roles_links.role_id
       WHERE public.roles.is_active = TRUE AND role_id != NEW.id
     );
 
@@ -34,7 +34,7 @@ BEGIN
         updated_at = NEW.updated_at
       WHERE id IN (
         SELECT user_id
-        FROM public.link_users_roles
+        FROM public.users_roles_links
         WHERE role_id = NEW.id
       );
     END IF;
