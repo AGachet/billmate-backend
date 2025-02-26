@@ -1,12 +1,13 @@
 /**
  * Resources
  */
-import { Controller, Post, Body, Res } from '@nestjs/common'
+import { Controller, Post, Body, Res, Get, UseGuards, Req } from '@nestjs/common'
 
 /**
  * Dependencies
  */
 import { AuthService } from '@modules/auth/services/auth.service'
+import { JwtAuthGuard } from '@modules/auth/guards/jwt-auth.guard'
 
 import { RequestPasswordResetDto } from '@modules/auth/dto/request-password-reset.dto'
 import { ResetPasswordDto } from '@modules/auth/dto/reset-password.dto'
@@ -17,8 +18,14 @@ import { SignUpDto } from '@modules/auth/dto/signup.dto'
 /**
  * Type
  */
-import type { SignInResponse, SignUpResponse, SignOutResponse, RequestPasswordResetResponse, ResetPasswordResponse } from '@modules/auth/services/auth.service'
-import type { Response } from 'express'
+import type { SignInResponse, SignUpResponse, SignOutResponse, RequestPasswordResetResponse, ResetPasswordResponse, MeResponse } from '@modules/auth/services/auth.service'
+import type { Response, Request } from 'express'
+import type { User } from '@prisma/client'
+
+// Extend Request type to include user property
+interface AuthenticatedRequest extends Request {
+  user: User
+}
 
 /**
  * Declaration
@@ -54,5 +61,11 @@ export class AuthController {
   @Post('reset-password')
   async resetPassword(@Body() resetPasswordDto: ResetPasswordDto): Promise<ResetPasswordResponse> {
     return this.authService.resetPassword(resetPasswordDto)
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('me')
+  async getMe(@Req() request: AuthenticatedRequest): Promise<MeResponse> {
+    return this.authService.getMe(request.user.id)
   }
 }

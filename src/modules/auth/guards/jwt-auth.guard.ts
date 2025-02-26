@@ -32,16 +32,24 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     const request = context.switchToHttp().getRequest()
     const response = context.switchToHttp().getResponse()
 
-    const accessToken = request.cookies['access_token']
+    const accessToken = request.cookies?.['access_token']
     if (!accessToken) {
       this.logger.warn(`No access token found for ${request.ip} - ${request.originalUrl}`, 'JwtAuthGuard')
       return this.tryRefreshToken(context, request, response)
     }
 
     try {
-      return (await super.canActivate(context)) as boolean
-    } catch {
-      this.logger.debug(`Access token expired, attempting refresh for ${request.ip}`, 'JwtAuthGuard')
+      // Use validateAccessToken which contains the verification logic
+      const user = await this.authService.validateAccessToken(accessToken)
+
+      // Store the authenticated user object in the request
+      // This makes the user data available to all downstream handlers and controllers
+      // without needing to validate the token again or fetch the user from the database
+      request.user = user
+
+      return true
+    } catch (error) {
+      this.logger.debug(`Access token expired or invalid: ${error.message}, attempting refresh for ${request.ip}`, 'JwtAuthGuard')
       return this.tryRefreshToken(context, request, response)
     }
   }
@@ -50,7 +58,7 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
   private async tryRefreshToken(context: ExecutionContext, request: Request, response: Response): Promise<boolean> {
     this.logger.debug(`Attempting token refresh for ${request.ip}`, 'JwtAuthGuard')
 
-    const refreshToken = request.cookies['refresh_token']
+    const refreshToken = request.cookies?.['refresh_token']
     if (!refreshToken) {
       this.logger.warn(`No refresh token found for ${request.ip}`, 'JwtAuthGuard')
       throw new UnauthorizedException('No refresh token provided.')
@@ -63,7 +71,8 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       this.logger.debug(`Tokens refreshed successfully for ${request.ip}`, 'JwtAuthGuard')
 
       // Update the request user with new token payload
-      request.user = await this.authService.validateAccessToken(tokens.accessToken)
+      const user = await this.authService.validateAccessToken(tokens.accessToken)
+      request.user = user
       return true
     } catch (error) {
       this.logger.warn(`Failed to refresh token for ${request.ip} - ${error.message}`, 'JwtAuthGuard')

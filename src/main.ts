@@ -3,6 +3,7 @@
  */
 import 'dotenv/config'
 import chalk from 'chalk'
+import cookieParser from 'cookie-parser'
 import { NestFactory } from '@nestjs/core'
 import { ValidationPipe } from '@nestjs/common'
 
@@ -25,6 +26,7 @@ const bootstrap = async () => {
   app.setGlobalPrefix(env.get('API_PREFIX'))
   app.useGlobalFilters(new GlobalExceptionFilter(logger))
   app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }))
+  app.use(cookieParser())
 
   await app.listen(env.get('PORT'))
 

@@ -25,7 +25,7 @@ import type { SignOutDto } from '@modules/auth/dto/signout.dto'
 import type { ResetPasswordDto } from '@modules/auth/dto/reset-password.dto'
 import type { RequestPasswordResetDto } from '@modules/auth/dto/request-password-reset.dto'
 
-interface TokenPayload {
+export interface TokenPayload {
   email: string
   sub: string
 }
@@ -55,6 +55,16 @@ export interface RequestPasswordResetResponse {
 
 export interface ResetPasswordResponse {
   message: string
+}
+
+export interface MeResponse {
+  userId: string
+  firstname: string | null
+  lastname: string | null
+  roles: string[]
+  modules: string[]
+  permissions: string[]
+  createdAt: Date
 }
 
 /**
@@ -337,6 +347,75 @@ export class AuthService {
     return { message: 'Password has been reset successfully' }
   }
 
+  async getMe(userId: string): Promise<MeResponse> {
+    this.logger.debug(`Getting user information for ${userId}`, 'getMe')
+
+    // Get user with roles, modules and permissions
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        rolesLinked: {
+          where: {
+            role: {
+              isActive: true
+            }
+          },
+          include: {
+            role: {
+              include: {
+                modulesLinked: {
+                  where: {
+                    module: {
+                      isActive: true
+                    }
+                  },
+                  include: {
+                    module: true
+                  }
+                },
+                permissionsLinked: {
+                  include: {
+                    permission: {
+                      include: {
+                        module: true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    })
+
+    if (!user) {
+      this.logger.warn(`User not found: ${userId}`, 'getMe')
+      throw new BadRequestException('User not found')
+    }
+
+    // Extract active roles
+    const roles = user.rolesLinked.map((userRole) => userRole.role.name)
+
+    // Extract modules from active roles (modules attached and active)
+    const modules = user.rolesLinked.flatMap((userRole) => userRole.role.modulesLinked.map((moduleLink) => moduleLink.module.name)).filter((value, index, self) => self.indexOf(value) === index) // Remove possible duplicates
+
+    // Extract permissions from active roles (permissions attached to active roles and modules)
+    const permissions = user.rolesLinked
+      .flatMap((userRole) => userRole.role.permissionsLinked.filter((permissionLink) => permissionLink.permission.module?.isActive).map((permissionLink) => permissionLink.permission.name))
+      .filter((value, index, self) => self.indexOf(value) === index) // Remove possible duplicates
+
+    return {
+      userId: user.id,
+      firstname: user.firstname,
+      lastname: user.lastname,
+      roles,
+      modules,
+      permissions,
+      createdAt: user.createdAt
+    }
+  }
+
   /**
    * Privates methods
    */
@@ -437,7 +516,10 @@ export class AuthService {
     return { accessToken, refreshToken }
   }
 
-  private async verifyToken(token: string, secret: string): Promise<TokenPayload> {
+  /**
+   * Shared methods
+   */
+  public async verifyToken(token: string, secret: string): Promise<TokenPayload> {
     try {
       return this.jwtService.verify(token, { secret }) as TokenPayload
     } catch {
@@ -446,9 +528,6 @@ export class AuthService {
     }
   }
 
-  /**
-   * Shared methods
-   */
   async validateAccessToken(token: string): Promise<User> {
     const payload = await this.verifyToken(token, this.env.get('JWT_SECRET_AUTH'))
     const user = await this.prisma.user.findUnique({
