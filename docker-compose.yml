@@ -1,0 +1,24 @@
+services:
+  ###############
+  # Backend API #
+  ###############
+  backend:
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    container_name: billmate-backend
+    env_file:
+      - ./.env
+    ports:
+      - '${BACKEND_PORT:-3500}:3500'
+    volumes:
+      - ./logs:/app/logs
+      - ./prisma:/app/prisma
+      - ./scripts:/app/scripts
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD', 'wget', '--quiet', '--tries=1', '--spider', 'http://localhost:3500/api/health']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
