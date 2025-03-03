@@ -127,12 +127,12 @@ export class AuthService {
       }
     })
 
-    // Log the token in development
-    if (this.env.get('NODE_ENV') === 'development') {
+    // Log the token in development and test
+    if (['development', 'test'].includes(this.env.get('NODE_ENV'))) {
       this.logger.debug(`User created successfully. \n\n------ Confirmation token for ${email} ------ \n${confirmationToken}\n`, 'signUp')
       return {
         message: 'User created successfully. Please check your email to activate your account.',
-        confirmationToken // Only displayed in development
+        confirmationToken // Only displayed in development and test
       }
     }
 
@@ -253,11 +253,11 @@ export class AuthService {
       }
     })
 
-    // Return token in development
-    if (this.env.get('NODE_ENV') === 'development') {
+    // Return token in development and test
+    if (['development', 'test'].includes(this.env.get('NODE_ENV'))) {
       return {
         message: 'Password reset link has been sent to your email.',
-        resetToken // Only in development
+        resetToken // Only in development and test
       }
     }
 
@@ -528,20 +528,6 @@ export class AuthService {
     }
   }
 
-  async validateAccessToken(token: string): Promise<User> {
-    const payload = await this.verifyToken(token, this.env.get('JWT_SECRET_AUTH'))
-    const user = await this.prisma.user.findUnique({
-      where: { id: payload.sub }
-    })
-
-    if (!user) {
-      this.logger.warn(`User not found: ${payload.sub}`, 'validateAccessToken')
-      throw new UnauthorizedException('User not found')
-    }
-
-    return user
-  }
-
   async refreshTokens(refreshToken: string): Promise<AuthTokens> {
     const payload = await this.verifyToken(refreshToken, this.env.get('JWT_SECRET_REFRESH'))
 
@@ -564,13 +550,13 @@ export class AuthService {
   setAuthCookies(response: Response, accessToken: string, refreshToken: string): void {
     response.cookie('access_token', accessToken, {
       httpOnly: true,
-      secure: this.env.get('NODE_ENV') === 'production',
+      secure: !['development', 'test'].includes(this.env.get('NODE_ENV')),
       sameSite: 'strict',
       path: '/'
     })
     response.cookie('refresh_token', refreshToken, {
       httpOnly: true,
-      secure: this.env.get('NODE_ENV') === 'production',
+      secure: !['development', 'test'].includes(this.env.get('NODE_ENV')),
       sameSite: 'strict',
       path: '/'
     })
@@ -579,13 +565,13 @@ export class AuthService {
   clearAuthCookies(response: Response): void {
     response.clearCookie('access_token', {
       httpOnly: true,
-      secure: this.env.get('NODE_ENV') === 'production',
+      secure: !['development', 'test'].includes(this.env.get('NODE_ENV')),
       sameSite: 'strict',
       path: '/'
     })
     response.clearCookie('refresh_token', {
       httpOnly: true,
-      secure: this.env.get('NODE_ENV') === 'production',
+      secure: !['development', 'test'].includes(this.env.get('NODE_ENV')),
       sameSite: 'strict',
       path: '/'
     })

@@ -24,10 +24,12 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config jest-e2e.config.js",
+    "test:e2e": "jest --config jest-e2e.config.js --runInBand",
+    "test:e2e:dev": "E2E_VERBOSE=true jest --config jest-e2e.config.js --runInBand --verbose",
     "db:update:dev": "./scripts/update-db-dev.sh",
     "db:update:prod": "./scripts/update-db-prod.sh",
-    "postinstall": "chmod +x ./scripts/update-db-dev.sh ./scripts/update-db-prod.sh"
+    "db:init:test": "./scripts/init-test-db.sh",
+    "postinstall": "chmod +x ./scripts/**/*.sh"
   },
   "keywords": [
     "billmate",

@@ -12,15 +12,18 @@ import { EnvConfig } from '@configs/env/services/env.service'
 import { PrismaService } from '@configs/prisma/services/prisma.service'
 import { AuthService } from '@modules/auth/services/auth.service'
 import { AuthController } from '@modules/auth/controllers/auth.controller'
+import { EnvModule } from '@configs/env/env.module'
+import { JwtAuthGuard } from '@modules/auth/guards/jwt-auth.guard'
+import { JwtStrategy } from '@modules/auth/strategies/jwt.strategy'
 
 /**
  * Declaration
  */
 @Module({
   imports: [
-    PassportModule,
+    PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
-      imports: [AuthModule],
+      imports: [EnvModule],
       useFactory: (env: EnvConfig) => ({
         secret: env.get('JWT_SECRET_AUTH'),
         signOptions: {
@@ -30,7 +33,7 @@ import { AuthController } from '@modules/auth/controllers/auth.controller'
       inject: [EnvConfig]
     })
   ],
-  providers: [AuthService, PrismaService],
+  providers: [AuthService, PrismaService, JwtAuthGuard, JwtStrategy],
   controllers: [AuthController],
   exports: [AuthService]
 })

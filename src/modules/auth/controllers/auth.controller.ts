@@ -1,7 +1,7 @@
 /**
  * Resources
  */
-import { Controller, Post, Body, Res, Get, UseGuards, Req } from '@nestjs/common'
+import { Controller, Post, Body, Res, Get, UseGuards, Req, HttpCode, HttpStatus } from '@nestjs/common'
 
 /**
  * Dependencies
@@ -35,11 +35,13 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('signup')
+  @HttpCode(HttpStatus.CREATED)
   async signUp(@Body() signUpDto: SignUpDto): Promise<SignUpResponse> {
     return this.authService.signUp(signUpDto)
   }
 
   @Post('signin')
+  @HttpCode(HttpStatus.OK)
   async signIn(@Body() signInDto: SignInDto, @Res({ passthrough: true }) response: Response): Promise<SignInResponse> {
     const { accessToken, refreshToken, userId } = await this.authService.signIn(signInDto)
     this.authService.setAuthCookies(response, accessToken, refreshToken)
@@ -47,6 +49,7 @@ export class AuthController {
   }
 
   @Post('signout')
+  @HttpCode(HttpStatus.OK)
   async signOut(@Res({ passthrough: true }) response: Response, @Body() signOutDto: SignOutDto): Promise<SignOutResponse> {
     const result = await this.authService.signOut(signOutDto)
     this.authService.clearAuthCookies(response)
@@ -54,17 +57,20 @@ export class AuthController {
   }
 
   @Post('request-password-reset')
+  @HttpCode(HttpStatus.OK)
   async requestPasswordReset(@Body() requestPasswordResetDto: RequestPasswordResetDto): Promise<RequestPasswordResetResponse> {
     return this.authService.requestPasswordReset(requestPasswordResetDto)
   }
 
   @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
   async resetPassword(@Body() resetPasswordDto: ResetPasswordDto): Promise<ResetPasswordResponse> {
     return this.authService.resetPassword(resetPasswordDto)
   }
 
   @UseGuards(JwtAuthGuard)
   @Get('me')
+  @HttpCode(HttpStatus.OK)
   async getMe(@Req() request: AuthenticatedRequest): Promise<MeResponse> {
     return this.authService.getMe(request.user.id)
   }

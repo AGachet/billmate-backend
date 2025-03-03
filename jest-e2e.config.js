@@ -1,14 +1,16 @@
 module.exports = {
   moduleFileExtensions: ['js', 'json', 'ts'],
-  rootDir: 'src',
+  rootDir: '.',
   testEnvironment: 'node',
-  testRegex: 'tests/.*\\.e2e-spec\\.ts$',
+  testRegex: 'src/.*\\.e2e-spec\\.ts$',
   transform: {
     '^.+\\.(t|j)s$': 'ts-jest'
   },
   moduleNameMapper: {
-    '^@modules/(.*)$': '<rootDir>/modules/$1',
-    '^@configs/(.*)$': '<rootDir>/configs/$1',
-    '^@common/(.*)$': '<rootDir>/common/$1'
-  }
+    '^@modules/(.*)$': '<rootDir>/src/modules/$1',
+    '^@configs/(.*)$': '<rootDir>/src/configs/$1',
+    '^@common/(.*)$': '<rootDir>/src/common/$1'
+  },
+  globalSetup: '<rootDir>/test/e2e-environment.ts',
+  globalTeardown: '<rootDir>/test/e2e-teardown.ts'
 }
