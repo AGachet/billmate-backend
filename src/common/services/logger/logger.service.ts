@@ -22,10 +22,8 @@ export class Logger implements LoggerService {
   }
 
   constructor(private readonly env: EnvConfig) {
-    const isProd = this.env.get('NODE_ENV') === 'production'
-
     this.logger = winston.createLogger({
-      level: isProd ? 'info' : 'debug',
+      level: this.env.get('LOG_LEVEL'),
       format: winston.format.combine(
         winston.format.timestamp(),
         winston.format.printf(({ level, message, timestamp, context, requestId, metadata }) => {
@@ -42,7 +40,7 @@ export class Logger implements LoggerService {
           format: winston.format.combine(winston.format.colorize())
         }),
         new DailyRotateFile({
-          filename: 'logs/application-%DATE%.log',
+          filename: `${this.env.get('LOG_DIR')}/application-%DATE%.log`,
           datePattern: 'YYYY-MM-DD',
           zippedArchive: true,
           maxSize: '20m',

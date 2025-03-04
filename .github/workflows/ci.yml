@@ -1,0 +1,183 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [master]
+
+env:
+  NODE_ENV: test
+
+jobs:
+  build:
+    name: Installation and build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --no-warnings
+
+      - name: Build
+        run: npm run build:ci
+
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+  test-code-compliance:
+    name: Tests - Code compliance (Prettier / ESLint / Type Check)
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Restore node_modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Install reviewdog
+        uses: reviewdog/action-setup@v1
+        with:
+          reviewdog_version: latest
+
+      - name: Run Prettier with Reviewdog
+        if: github.event_name == 'pull_request'
+        env:
+          REVIEWDOG_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          npx prettier --check . | sed 's/\(^.*$\)/::warning file=.::\1/' | reviewdog -efm="%f:%l:%c: %m" \
+            -reporter=github-pr-check \
+            -level=warning \
+            -filter-mode=added
+
+      - name: Run ESLint with Reviewdog
+        if: github.event_name == 'pull_request'
+        uses: reviewdog/action-eslint@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          reporter: github-pr-check
+          eslint_flags: '--config eslint.config.mjs'
+          fail_level: warning
+          filter_mode: added
+          level: warning
+          tool_name: ESLint
+
+      - name: Run Type Check with Reviewdog
+        if: github.event_name == 'pull_request'
+        env:
+          REVIEWDOG_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          npx tsc --noEmit 2>&1 | reviewdog -f=tsc \
+            -reporter=github-pr-check \
+            -level=error \
+            -filter-mode=added
+
+  test-unit:
+    name: Tests - Unit
+    needs: [build, test-code-compliance]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Restore node_modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Run unit tests
+        run: npm test -- --passWithNoTests
+
+  test-e2e:
+    name: Tests - E2E
+    needs: [build, test-code-compliance]
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: test_db
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U test_user -d test_db" --health-interval 5s --health-timeout 5s --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Restore node_modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Load environment variables
+        run: |
+          echo "📦 Loading environment variables from .env.test..."
+          export $(grep -v '^#' .env.test | xargs)
+          echo "✓ Environment variables loaded"
+
+      - name: Wait for database to be ready
+        run: |
+          echo "⏳ Waiting for PostgreSQL to be ready..."
+          for i in {1..30}; do
+            if pg_isready -h localhost -p 5433 -U test_user -d test_db; then
+              echo "✓ PostgreSQL is ready!"
+              exit 0
+            fi
+            echo "  ↳ Attempt $i/30..."
+            sleep 2
+          done
+          echo "❌ PostgreSQL did not become ready in time."
+          exit 1
+
+      - name: Setup test database
+        run: npm run db:init:test
+
+      - name: Run E2E tests
+        run: |
+          export $(grep -v '^#' .env.test | xargs)
+          mkdir -p ./logs
+          npm run test:e2e
