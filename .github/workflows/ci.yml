@@ -4,12 +4,34 @@ on:
   pull_request:
     branches: [master]
 
-env:
-  NODE_ENV: test
-
 jobs:
+  load-env:
+    name: Load environment variables
+    runs-on: ubuntu-latest
+    outputs:
+      env_loaded: ${{ steps.set_env.outputs.env_loaded }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Load test environment variables
+        id: set_env
+        run: |
+          if [ -f .env.test ]; then
+            echo "Loading environment variables from .env.test..."
+            set -a
+            source .env.test
+            set +a
+            echo "Environment variables loaded successfully"
+            echo "env_loaded=true" >> $GITHUB_OUTPUT
+          else
+            echo "Error: .env.test file not found"
+            echo "env_loaded=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
   build:
     name: Installation and build
+    needs: load-env
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,17 +49,19 @@ jobs:
       - name: Build
         run: npm run build:ci
 
-      - name: Cache node_modules
+      - name: Cache build artifacts
         uses: actions/cache@v4
         with:
-          path: node_modules
-          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          path: |
+            dist
+            node_modules
+          key: ${{ runner.os }}-build-${{ hashFiles('**/package-lock.json') }}
           restore-keys: |
-            ${{ runner.os }}-node-
+            ${{ runner.os }}-build-
 
   test-code-compliance:
     name: Tests - Code compliance (Prettier / ESLint / Type Check)
-    needs: build
+    needs: [load-env, build]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -49,13 +73,15 @@ jobs:
           cache: 'npm'
           cache-dependency-path: package-lock.json
 
-      - name: Restore node_modules
+      - name: Restore build artifacts
         uses: actions/cache@v4
         with:
-          path: node_modules
-          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          path: |
+            dist
+            node_modules
+          key: ${{ runner.os }}-build-${{ hashFiles('**/package-lock.json') }}
           restore-keys: |
-            ${{ runner.os }}-node-
+            ${{ runner.os }}-build-
 
       - name: Install reviewdog
         uses: reviewdog/action-setup@v1
@@ -96,7 +122,7 @@ jobs:
 
   test-unit:
     name: Tests - Unit
-    needs: [build, test-code-compliance]
+    needs: [load-env, build, test-code-compliance]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -108,20 +134,22 @@ jobs:
           cache: 'npm'
           cache-dependency-path: package-lock.json
 
-      - name: Restore node_modules
+      - name: Restore build artifacts
         uses: actions/cache@v4
         with:
-          path: node_modules
-          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          path: |
+            dist
+            node_modules
+          key: ${{ runner.os }}-build-${{ hashFiles('**/package-lock.json') }}
           restore-keys: |
-            ${{ runner.os }}-node-
+            ${{ runner.os }}-build-
 
       - name: Run unit tests
         run: npm test -- --passWithNoTests
 
   test-e2e:
     name: Tests - E2E
-    needs: [build, test-code-compliance]
+    needs: [load-env, build, test-code-compliance]
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -145,19 +173,15 @@ jobs:
           cache: 'npm'
           cache-dependency-path: package-lock.json
 
-      - name: Restore node_modules
+      - name: Restore build artifacts
         uses: actions/cache@v4
         with:
-          path: node_modules
-          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          path: |
+            dist
+            node_modules
+          key: ${{ runner.os }}-build-${{ hashFiles('**/package-lock.json') }}
           restore-keys: |
-            ${{ runner.os }}-node-
-
-      - name: Load environment variables
-        run: |
-          echo "📦 Loading environment variables from .env.test..."
-          export $(grep -v '^#' .env.test | xargs)
-          echo "✓ Environment variables loaded"
+            ${{ runner.os }}-build-
 
       - name: Wait for database to be ready
         run: |
@@ -178,6 +202,5 @@ jobs:
 
       - name: Run E2E tests
         run: |
-          export $(grep -v '^#' .env.test | xargs)
           mkdir -p ./logs
           npm run test:e2e
