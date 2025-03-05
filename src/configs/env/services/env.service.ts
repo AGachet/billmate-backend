@@ -36,14 +36,14 @@ export class EnvConfig {
     JWT_CREATE_ACCOUNT_EXPIRES_IN: z.string().refine((val): val is StringValue => true),
     JWT_RESET_PASSWORD_EXPIRES_IN: z.string().refine((val): val is StringValue => true),
 
-    JWT_SECRET_AUTH: z.string().min(32),
-    JWT_SECRET_REFRESH: z.string().min(32),
-    JWT_SECRET_CONFIRM_ACCOUNT: z.string().min(32),
-    JWT_SECRET_RESET_PASSWORD: z.string().min(32),
+    JWT_SECRET_AUTH: z.string().min(process.env.NODE_ENV === 'test' ? 1 : 32),
+    JWT_SECRET_REFRESH: z.string().min(process.env.NODE_ENV === 'test' ? 1 : 32),
+    JWT_SECRET_CONFIRM_ACCOUNT: z.string().min(process.env.NODE_ENV === 'test' ? 1 : 32),
+    JWT_SECRET_RESET_PASSWORD: z.string().min(process.env.NODE_ENV === 'test' ? 1 : 32),
 
     // Log Configuration
     LOG_LEVEL: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
-    LOG_DIR: z.string().min(1)
+    LOG_DIR: z.string().default('logs')
   })
 
   constructor() {

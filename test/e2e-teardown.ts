@@ -1,11 +1,17 @@
 import { execSync } from 'child_process'
 
 const isVerbose = process.env.E2E_VERBOSE === 'true'
+const isCI = process.env.CI === 'true'
 const execOptions = { stdio: isVerbose ? ('inherit' as const) : ('pipe' as const) }
 
 export default async function () {
   console.log('\n🧹 Cleaning Test Environment')
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+
+  if (isCI) {
+    console.log('🛑 CI environment detected, skipping docker-compose shutdown.')
+    return
+  }
 
   if (process.exitCode === undefined || process.exitCode === 0) {
     try {
