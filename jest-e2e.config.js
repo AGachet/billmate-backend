@@ -11,6 +11,6 @@ module.exports = {
     '^@configs/(.*)$': '<rootDir>/src/configs/$1',
     '^@common/(.*)$': '<rootDir>/src/common/$1'
   },
-  globalSetup: '<rootDir>/test/e2e-environment.ts',
-  globalTeardown: '<rootDir>/test/e2e-teardown.ts'
+  globalSetup: '<rootDir>/tests-configs/e2e-environment.ts',
+  globalTeardown: '<rootDir>/tests-configs/e2e-teardown.ts'
 }
