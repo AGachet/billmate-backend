@@ -29,10 +29,10 @@ export class HealthService {
         () => this.appHealthCheck.isHealthy()
         // TODO: Add database and memory checks here
       ])
-      this.logger.debug(`✅ Health checks passed - Status: ${result.status}`, 'HealthService')
+      this.logger.debug(`Health checks passed - Status: ${result.status}`, 'HealthService')
       return result
     } catch (error) {
-      this.logger.error(`❌ Health checks failed: ${error.message}`, error.stack || JSON.stringify(error), 'HealthService')
+      this.logger.error(`Health checks failed: ${error.message}`, error.stack || JSON.stringify(error), 'HealthService')
       throw error
     }
   }

@@ -145,7 +145,7 @@ jobs:
             ${{ runner.os }}-build-
 
       - name: Run unit tests
-        run: npm test -- --passWithNoTests
+        run: npm run test:unit -- --passWithNoTests
 
   test-e2e:
     name: Tests - E2E
@@ -202,5 +202,4 @@ jobs:
 
       - name: Run E2E tests
         run: |
-          mkdir -p ./logs
           npm run test:e2e

@@ -1,1 +1,1 @@
-npm run lint && npm run type-check && npm run format && npm run test:e2e:verbose
+npm run test:full

@@ -548,6 +548,7 @@ export class AuthService {
   }
 
   setAuthCookies(response: Response, accessToken: string, refreshToken: string): void {
+    this.logger.debug('Setting auth cookies for user', 'setAuthCookies')
     response.cookie('access_token', accessToken, {
       httpOnly: true,
       secure: !['development', 'test'].includes(this.env.get('NODE_ENV')),
@@ -563,6 +564,7 @@ export class AuthService {
   }
 
   clearAuthCookies(response: Response): void {
+    this.logger.debug('Clearing auth cookies for user', 'clearAuthCookies')
     response.clearCookie('access_token', {
       httpOnly: true,
       secure: !['development', 'test'].includes(this.env.get('NODE_ENV')),
