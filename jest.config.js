@@ -11,8 +11,7 @@ module.exports = {
   moduleNameMapper: {
     '^@modules/(.*)$': '<rootDir>/modules/$1',
     '^@configs/(.*)$': '<rootDir>/configs/$1',
-    '^@common/(.*)$': '<rootDir>/common/$1',
-    '^@test-configs/(.*)$': '<rootDir>/../test-configs/$1'
+    '^@common/(.*)$': '<rootDir>/common/$1'
   },
-  setupFilesAfterEnv: ['../test-configs/unit-mocks-glob.ts']
+  setupFilesAfterEnv: ['<rootDir>/configs/test/unit-mocks-glob.ts']
 }

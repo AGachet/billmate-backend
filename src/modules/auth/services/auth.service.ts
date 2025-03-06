@@ -19,11 +19,19 @@ import { UserDefaults } from '@configs/db/user.config'
  * Type
  */
 import type { User, UserToken } from '@prisma/client'
-import type { SignUpDto } from '@modules/auth/dto/signup.dto'
-import type { SignInDto } from '@modules/auth/dto/signin.dto'
-import type { SignOutDto } from '@modules/auth/dto/signout.dto'
-import type { ResetPasswordDto } from '@modules/auth/dto/reset-password.dto'
-import type { RequestPasswordResetDto } from '@modules/auth/dto/request-password-reset.dto'
+
+import type { SignUpDto } from '@modules/auth/dto/requests/signup.dto'
+import type { SignInDto } from '@modules/auth/dto/requests/signin.dto'
+import type { SignOutDto } from '@modules/auth/dto/requests/signout.dto'
+import type { ResetPasswordDto } from '@modules/auth/dto/requests/reset-password.dto'
+import type { RequestPasswordResetDto } from '@modules/auth/dto/requests/request-password-reset.dto'
+
+import type { SignUpResponseDto } from '@modules/auth/dto/responses/signup.response.dto'
+import type { SignInResponseDto } from '@modules/auth/dto/responses/signin.response.dto'
+import type { SignOutResponseDto } from '@modules/auth/dto/responses/signout.response.dto'
+import type { RequestPasswordResetResponseDto } from '@modules/auth/dto/responses/request-password-reset.response.dto'
+import type { ResetPasswordResponseDto } from '@modules/auth/dto/responses/reset-password.response.dto'
+import type { MeResponseDto } from '@modules/auth/dto/responses/me.response.dto'
 
 export interface TokenPayload {
   email: string
@@ -33,38 +41,6 @@ export interface TokenPayload {
 export interface AuthTokens {
   accessToken: string
   refreshToken: string
-}
-
-export interface SignUpResponse {
-  message: string
-  confirmationToken?: string // Only displayed in development
-}
-
-export interface SignInResponse {
-  userId: string
-}
-
-export interface SignOutResponse {
-  message: string
-}
-
-export interface RequestPasswordResetResponse {
-  message: string
-  resetToken?: string // Only displayed in development
-}
-
-export interface ResetPasswordResponse {
-  message: string
-}
-
-export interface MeResponse {
-  userId: string
-  firstname: string | null
-  lastname: string | null
-  roles: string[]
-  modules: string[]
-  permissions: string[]
-  createdAt: Date
 }
 
 /**
@@ -82,7 +58,7 @@ export class AuthService {
   /**
    * End points methods
    */
-  async signUp(signUpDto: SignUpDto): Promise<SignUpResponse> {
+  async signUp(signUpDto: SignUpDto): Promise<SignUpResponseDto> {
     const { email, password, firstname, lastname } = signUpDto
 
     this.logger.debug(`Sign-up attempt for ${email}`, 'signUp')
@@ -90,8 +66,10 @@ export class AuthService {
     // Check if the user already exists
     const existingUser = await this.prisma.user.findUnique({ where: { email } })
     if (existingUser) {
-      this.logger.warn(`Email already exists: ${email}`, 'signUp')
-      throw new BadRequestException('Email already exists')
+      this.logger.warn(`Sign-up attempt with existing email: ${email}`, 'signUp')
+      return {
+        message: 'If the email address is valid, you will receive a confirmation email shortly.'
+      }
     }
 
     // Hash the password
@@ -131,7 +109,7 @@ export class AuthService {
     if (['development', 'test'].includes(this.env.get('NODE_ENV'))) {
       this.logger.debug(`User created successfully. \n\n------ Confirmation token for ${email} ------ \n${confirmationToken}\n`, 'signUp')
       return {
-        message: 'User created successfully. Please check your email to activate your account.',
+        message: 'If the email address is valid, you will receive a confirmation email shortly.',
         confirmationToken // Only displayed in development and test
       }
     }
@@ -141,11 +119,11 @@ export class AuthService {
 
     this.logger.debug(`Sign-up successful for ${email}`, 'signUp')
     return {
-      message: 'User created successfully. Please check your email to activate your account.'
+      message: 'If the email address is valid, you will receive a confirmation email shortly.'
     }
   }
 
-  async signIn(signInDto: SignInDto): Promise<SignInResponse & AuthTokens> {
+  async signIn(signInDto: SignInDto): Promise<SignInResponseDto & AuthTokens> {
     const { email, password, confirmAccountToken } = signInDto
 
     this.logger.debug(`Sign-in attempt for ${email}`, 'signIn')
@@ -169,7 +147,7 @@ export class AuthService {
     return { accessToken, refreshToken, userId: user.id }
   }
 
-  async signOut(signOutDto: SignOutDto): Promise<SignOutResponse> {
+  async signOut(signOutDto: SignOutDto): Promise<SignOutResponseDto> {
     const { userId } = signOutDto
 
     this.logger.debug(`Logging out user with ID: ${userId}`, 'signout')
@@ -186,7 +164,7 @@ export class AuthService {
     return { message: 'Logged out successfully' }
   }
 
-  async requestPasswordReset(requestPasswordResetDto: RequestPasswordResetDto): Promise<RequestPasswordResetResponse> {
+  async requestPasswordReset(requestPasswordResetDto: RequestPasswordResetDto): Promise<RequestPasswordResetResponseDto> {
     const { email } = requestPasswordResetDto
 
     this.logger.debug(`Password reset requested for ${email}`, 'requestPasswordReset')
@@ -220,18 +198,10 @@ export class AuthService {
       }
     })
 
-    if (!user) {
-      this.logger.warn(`User not found: ${email}`, 'requestPasswordReset')
-      throw new BadRequestException('User not found')
-    }
-
-    // Check if user has access to password reset
-    const hasModuleAccess = user.rolesLinked.some((userRole) => userRole.role.modulesLinked.length > 0)
-    const hasPermission = user.rolesLinked.some((userRole) => userRole.role.permissionsLinked.length > 0)
-
-    if (!hasModuleAccess || !hasPermission) {
-      this.logger.warn(`User ${email} does not have access to password reset`, 'requestPasswordReset')
-      throw new UnauthorizedException('You do not have permission to reset passwords')
+    // If the user does not exist or does not have the permissions, still return a success message
+    if (!user || !user.rolesLinked.some((userRole) => userRole.role.modulesLinked.length > 0) || !user.rolesLinked.some((userRole) => userRole.role.permissionsLinked.length > 0)) {
+      this.logger.warn(`Password reset requested for non-existent user or without permissions: ${email}`, 'requestPasswordReset')
+      return { message: 'If the email address is valid and has permission to reset password, you will receive reset instructions shortly.' }
     }
 
     // Generate reset token
@@ -256,17 +226,17 @@ export class AuthService {
     // Return token in development and test
     if (['development', 'test'].includes(this.env.get('NODE_ENV'))) {
       return {
-        message: 'Password reset link has been sent to your email.',
+        message: 'If the email address is valid and has permission to reset password, you will receive reset instructions shortly.',
         resetToken // Only in development and test
       }
     }
 
     // TODO: Send email with reset link
     this.logger.debug(`Password reset link sent to ${email}`, 'requestPasswordReset')
-    return { message: 'Password reset link has been sent to your email.' }
+    return { message: 'If the email address is valid and has permission to reset password, you will receive reset instructions shortly.' }
   }
 
-  async resetPassword(resetPasswordDto: ResetPasswordDto): Promise<ResetPasswordResponse> {
+  async resetPassword(resetPasswordDto: ResetPasswordDto): Promise<ResetPasswordResponseDto> {
     const { resetPasswordToken, password, confirmPassword } = resetPasswordDto
 
     this.logger.debug('Password reset attempt', 'resetPassword')
@@ -347,7 +317,7 @@ export class AuthService {
     return { message: 'Password has been reset successfully' }
   }
 
-  async getMe(userId: string): Promise<MeResponse> {
+  async getMe(userId: string): Promise<MeResponseDto> {
     this.logger.debug(`Getting user information for ${userId}`, 'getMe')
 
     // Get user with roles, modules and permissions

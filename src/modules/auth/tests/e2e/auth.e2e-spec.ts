@@ -102,7 +102,7 @@ describe('Auth Module (e2e)', () => {
 
   describe('Complete authentication flow', () => {
     it('1. Should create a new user (signup)', async () => {
-      const response = await agent.post('/api/auth/signup').send(testUser).expect(201)
+      const response = await agent.post('/api/auth/signup').send(testUser).expect(200)
 
       expect(response.body).toHaveProperty('message')
       expect(response.body).toHaveProperty('confirmationToken')
@@ -157,6 +157,7 @@ describe('Auth Module (e2e)', () => {
       const response = await agent.post('/api/auth/request-password-reset').send({ email: testUser.email }).expect(200)
 
       expect(response.body).toHaveProperty('message')
+      // In test environment, we should receive the resetToken
       expect(response.body).toHaveProperty('resetToken')
 
       // Store reset token for next test
