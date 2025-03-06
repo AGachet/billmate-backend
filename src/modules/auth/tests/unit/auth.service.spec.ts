@@ -10,7 +10,7 @@ import * as bcrypt from 'bcrypt'
  * Dependencies
  */
 import { PrismaService } from '@configs/prisma/services/prisma.service'
-import { mockChalk, mockWinston } from '@test-configs/unit-mocks-glob'
+import { mockChalk, mockWinston } from '@configs/test/unit-mocks-glob'
 import { AuthService } from '@modules/auth/services/auth.service'
 import { Logger } from '@common/services/logger/logger.service'
 import { EnvConfig } from '@configs/env/services/env.service'
@@ -204,7 +204,7 @@ describe('AuthService', () => {
       const result = await service.signUp(signUpDto)
 
       expect(result).toEqual({
-        message: 'User created successfully. Please check your email to activate your account.',
+        message: 'If the email address is valid, you will receive a confirmation email shortly.',
         confirmationToken: mockToken
       })
       expect(prismaService.user.create).toHaveBeenCalledWith({
@@ -219,12 +219,16 @@ describe('AuthService', () => {
       expect(logger.debug).toHaveBeenCalledWith('Sign-up attempt for test@example.com', 'signUp')
     })
 
-    it('should throw BadRequestException if user already exists', async () => {
+    it('should handle existing user gracefully', async () => {
       ;(prismaService.user.findUnique as jest.Mock).mockResolvedValue(mockUser)
 
-      await expect(service.signUp(signUpDto)).rejects.toThrow(BadRequestException)
+      const result = await service.signUp(signUpDto)
+
+      expect(result).toEqual({
+        message: 'If the email address is valid, you will receive a confirmation email shortly.'
+      })
       expect(prismaService.user.create).not.toHaveBeenCalled()
-      expect(logger.warn).toHaveBeenCalledWith('Email already exists: test@example.com', 'signUp')
+      expect(logger.warn).toHaveBeenCalledWith('Sign-up attempt with existing email: test@example.com', 'signUp')
     })
   })
 
@@ -308,13 +312,13 @@ describe('AuthService', () => {
       const result = await service.requestPasswordReset(requestPasswordResetDto)
 
       expect(result).toEqual({
-        message: 'Password reset link has been sent to your email.',
+        message: 'If the email address is valid and has permission to reset password, you will receive reset instructions shortly.',
         resetToken: mockToken
       })
       expect(logger.debug).toHaveBeenCalledWith('Password reset requested for test@example.com', 'requestPasswordReset')
     })
 
-    it('should throw UnauthorizedException if user has no permission', async () => {
+    it('should handle user without permission gracefully', async () => {
       ;(prismaService.user.findUnique as jest.Mock).mockResolvedValue({
         ...mockUser,
         rolesLinked: [
@@ -327,8 +331,12 @@ describe('AuthService', () => {
         ]
       })
 
-      await expect(service.requestPasswordReset(requestPasswordResetDto)).rejects.toThrow(UnauthorizedException)
-      expect(logger.warn).toHaveBeenCalledWith('User test@example.com does not have access to password reset', 'requestPasswordReset')
+      const result = await service.requestPasswordReset(requestPasswordResetDto)
+
+      expect(result).toEqual({
+        message: 'If the email address is valid and has permission to reset password, you will receive reset instructions shortly.'
+      })
+      expect(logger.warn).toHaveBeenCalledWith('Password reset requested for non-existent user or without permissions: test@example.com', 'requestPasswordReset')
     })
   })
 

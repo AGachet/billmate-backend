@@ -211,6 +211,7 @@ billmate-backend/
 │   │
 │   ├── configs/          # Application configurations
 │   │   ├── prisma/       # Prisma configuration
+│   │   ├── test/         # Test configuration
 │   │   ├── env/          # Environment configuration
 │   │   └── db/           # Database configuration
 │   │
@@ -220,8 +221,6 @@ billmate-backend/
 │   │
 │   ├── app.module.ts     # Root module
 │   └── main.ts           # Application entry point
-|
-│── test-configs/        # Config files for testing process
 │
 │── scripts/              # Helper scripts
 │── .env.test             # Test & Exemple environment variables
