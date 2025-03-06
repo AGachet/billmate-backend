@@ -9,7 +9,7 @@ import { HealthCheckService, HealthCheckResult, HealthIndicatorResult, HealthInd
  */
 import { AppHealthCheck } from '@modules/health/checks/app.health.check'
 import { HealthService } from '@modules/health/services/health.service'
-import { mockChalk, mockWinston } from '@test-configs/unit-mocks-glob'
+import { mockChalk, mockWinston } from '@configs/test/unit-mocks-glob'
 import { Logger } from '@common/services/logger/logger.service'
 
 /**
