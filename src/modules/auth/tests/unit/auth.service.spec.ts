@@ -10,7 +10,7 @@ import * as bcrypt from 'bcrypt'
  * Dependencies
  */
 import { PrismaService } from '@configs/prisma/services/prisma.service'
-import { mockChalk, mockWinston } from '@tests-configs/unit-mocks-glob'
+import { mockChalk, mockWinston } from '@test-configs/unit-mocks-glob'
 import { AuthService } from '@modules/auth/services/auth.service'
 import { Logger } from '@common/services/logger/logger.service'
 import { EnvConfig } from '@configs/env/services/env.service'

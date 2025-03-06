@@ -12,7 +12,7 @@ module.exports = {
     '^@modules/(.*)$': '<rootDir>/modules/$1',
     '^@configs/(.*)$': '<rootDir>/configs/$1',
     '^@common/(.*)$': '<rootDir>/common/$1',
-    '^@tests-configs/(.*)$': '<rootDir>/../tests-configs/$1'
+    '^@test-configs/(.*)$': '<rootDir>/../test-configs/$1'
   },
-  setupFilesAfterEnv: ['../tests-configs/unit-mocks-glob.ts']
+  setupFilesAfterEnv: ['../test-configs/unit-mocks-glob.ts']
 }

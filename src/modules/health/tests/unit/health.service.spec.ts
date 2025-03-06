@@ -8,8 +8,8 @@ import { HealthCheckService, HealthCheckResult, HealthIndicatorResult, HealthInd
  * Dependencies
  */
 import { AppHealthCheck } from '@modules/health/checks/app.health.check'
-import { mockChalk, mockWinston } from '@tests-configs/unit-mocks-glob'
 import { HealthService } from '@modules/health/services/health.service'
+import { mockChalk, mockWinston } from '@test-configs/unit-mocks-glob'
 import { Logger } from '@common/services/logger/logger.service'
 
 /**

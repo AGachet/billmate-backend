@@ -1,6 +1,43 @@
 # BillMate Backend
 
-**BillMate** is an open-source backend built with **NestJS**, **Prisma**, and **PostgreSQL**. It provides a powerful solution for managing clients, invoices, and financial tasks.
+**BillMate Backend** is an open-source **TypeScript** backend built with **NestJS**, **Prisma**, and **PostgreSQL**. It's a part of the SaaS Billmate which provides a powerful solution for managing
+clients, invoices, and financial tasks.
+
+## ✨ Features
+
+### 🔐 Security & Authentication
+
+- Robust JWT-based authentication system (access + refresh tokens)
+- Secure cookie management with httpOnly (frontend-friendly)
+- Two-step password reset process
+- Multiple session management with token handling
+- Application health monitoring
+
+### 👥 Role & Permission Management
+
+- Customizable user roles (admin, user, etc.)
+- Feature-based module activation system
+- Granular permissions (per module and role)
+- Permission verification middleware
+- Fine-grained resource access control
+
+### 🧪 Quality & Testing
+
+- Comprehensive unit tests with Jest
+- E2E testing with Jest & Supertest
+- On-the-fly database dockerization for E2E tests (local & CI)
+- Commit message verification & tests via Husky
+- Automated linting and formatting
+- Automated type checking
+
+### 📝 Architecture & CI/CD
+
+- Modular design with NestJS (microservices-ready)
+- Dockerization (frontend-friendly)
+- CI/CD with test execution on Pull Requests
+- Automated database setup (scripts + Prisma)
+- Database updates management with Prisma Migrations
+- Centralized logging (structured, configurable log levels)
 
 ## 📌 Installation & Setup
 
@@ -24,15 +61,15 @@ npm install
 During installation, the following command ensures database update scripts are executable:
 
 ```sh
-chmod +x ./scripts/update-db-dev.sh ./scripts/update-db-prod.sh
+chmod +x ./scripts/update-db-dev.sh ./scripts/update-db-prod.sh ./init-test-db.sh
 ```
 
 ### 3️⃣ Environment Configuration
 
-Create a **.env** file based on **.env.example**, and update the necessary environment variables:
+Create a **.env** file based on **.env.test**, and update the necessary environment variables:
 
 ```sh
-cp .env.example .env
+cp .env.test .env
 ```
 
 Edit `.env` with your database configuration:
@@ -65,12 +102,31 @@ npm run debug
 npm run prod
 ```
 
-### Lint & Formatting & types
+### Lint & Formatting & Types
 
 ```sh
 npm run lint
 npm run format
 npm run type-check
+```
+
+### Testing Commands
+
+```sh
+# Unit Tests
+npm run test:unit
+npm run test:unit:watch
+npm run test:unit:coverage
+npm run test:unit:verbose
+
+# E2E Tests
+npm run test:e2e
+npm run test:e2e:verbose
+npm run test:e2e:coverage
+
+# Full Test Suite
+npm run test:full
+npm run test:full:verbose
 ```
 
 ---
@@ -85,12 +141,13 @@ npm run db:update:dev <migration_name>
 
 #### Options:
 
-- `--wf`: Includes **functions** in the migration.
-- `--wt`: Includes **triggers** in the migration.
+- `--wf`: With **functions** in the migration.
+- `--wt`: With **triggers** in the migration.
+- `--wds`: With **triggers** in the migration
 - Example:
 
 ```sh
-npm run db:update:dev add_authentication -- --wf --wt
+npm run db:update:dev init_data_base_config -- --wf --wt --wds
 ```
 
 This will create two separate migrations:
@@ -138,66 +195,38 @@ npx prisma migrate dev --name <migration_name>
 npx prisma migrate deploy
 ```
 
----
-
-## ✅ Testing
-
-### Run Unit Tests
-
-```sh
-npm run test
-```
-
-### Run Tests in Watch Mode
-
-```sh
-npm run test:watch
-```
-
-### Run End-to-End (E2E) Tests
-
-```sh
-npm run test:e2e
-```
-
-### Generate test coverage
-
-```sh
-npm run test:cov
-```
-
----
-
 ## 📂 Project Structure
 
 ```
 billmate-backend/
-│── prisma/                 # Prisma database schema and migrations
-│   ├── migrations/         # Prisma database migrations "commit"
-│   ├── schema/             # Tables and enums organized by context
-│   └── sql/                # SQL scripts for functions & triggers
+│── prisma/               # Prisma database schema and migrations
+│   ├── migrations/       # Prisma database migrations "commit"
+│   ├── schema/           # Tables and enums organized by context
+│   └── sql/              # SQL scripts for functions & triggers
 │
 │── src/
-│   ├── common/
-|   │   ├── filters/        # Common Filters
-|   │   └── services/       # Common services
-|   │
-│   ├── configs/
-|   │   └── prisma/         # Prisma module & service
-|   │
-│   ├── modules/
-|   │   ├── health/         # Health feature module
-|   │   ├── feature A/      # Feature A module
-|   │   ├── feature B/      # Feature B module
-|   │   └── feature C/      # Feature C module
-|   │
-│   ├── app.module.ts           # Root module
-│   └── main.ts
+│   ├── common/           # Shared components and utilities
+│   │   ├── filters/      # Common exception filters
+│   │   └── services/     # Shared services
+│   │
+│   ├── configs/          # Application configurations
+│   │   ├── prisma/       # Prisma configuration
+│   │   ├── env/          # Environment configuration
+│   │   └── db/           # Database configuration
+│   │
+│   ├── modules/          # Feature modules
+│   │   ├── auth/         # Authentication module
+│   │   └── health/       # Health check module
+│   │
+│   ├── app.module.ts     # Root module
+│   └── main.ts           # Application entry point
+|
+│── test-configs/        # Config files for testing process
 │
-│── scripts/                # Helper scripts
-│── .env.example            # Example environment variables
-│── package.json            # Project dependencies and scripts
-└── README.md               # Documentation
+│── scripts/              # Helper scripts
+│── .env.test             # Test & Exemple environment variables
+│── package.json          # Project dependencies and scripts
+└── README.md             # Documentation
 ```
 
 ### Module Structure
@@ -206,13 +235,13 @@ Each module in `modules/` follows this structure:
 
 ```
 modules/example/
-├── dto/               # Module-specific DTOs
-├── services/          # Module-specific services
-├── controllers/       # Module-specific controllers
-├── tests/             # Module-specific tests
-│   ├── unit/          # Module-specific unit tests
-│   └── e2e/           # Module-specific E2E tests
-└── example.module.ts
+├── dto/                # Data Transfer Objects
+├── services/           # Business logic
+├── controllers/        # HTTP endpoints
+├── tests/              # Module-specific tests
+│   ├── unit/           # Unit tests
+│   └── e2e/            # End-to-end tests
+└── example.module.ts   # Module definition
 ```
 
 ---

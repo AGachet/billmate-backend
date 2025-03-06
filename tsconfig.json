@@ -23,7 +23,7 @@
       "@modules/*": ["src/modules/*"],
       "@common/*": ["src/common/*"],
       "@configs/*": ["src/configs/*"],
-      "@tests-configs/*": ["tests-configs/*"],
+      "@test-configs/*": ["test-configs/*"],
       "@/*": ["src/*"]
     }
   }
