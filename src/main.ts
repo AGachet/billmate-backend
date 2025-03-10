@@ -13,8 +13,8 @@ import 'dotenv/config'
 import { AppModule } from './app.module'
 import { EnvConfig } from '@configs/env/services/env.service'
 import { Logger } from '@common/services/logger/logger.service'
-import { setupOpenApi } from '@configs/open-api/services/open-api'
 import { GlobalExceptionFilter } from '@common/filters/global-exception.filter'
+import { ApiDocsService } from './modules/api-docs/services/api-docs.service'
 
 /**
  * Declaration
@@ -29,8 +29,15 @@ const bootstrap = async () => {
   app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }))
   app.use(cookieParser())
 
-  // Setup Swagger/OpenAPI for documentation
-  if (env.get('NODE_ENV') === 'development') setupOpenApi(app)
+  // Generate OpenAPI documentation in development mode
+  if (env.get('NODE_ENV') === 'development') {
+    try {
+      const apiDocsService = app.get(ApiDocsService)
+      apiDocsService.generateDocumentation(app)
+    } catch (error) {
+      logger.error(`Failed to generate API documentation: ${error.message}`)
+    }
+  }
 
   await app.listen(env.get('PORT'))
 
