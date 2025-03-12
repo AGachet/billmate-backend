@@ -30,10 +30,12 @@ const bootstrap = async () => {
   app.use(cookieParser())
 
   // Generate OpenAPI documentation in development mode
+  let docsGenerated = false
   if (env.get('NODE_ENV') === 'development') {
     try {
       const apiDocsService = app.get(ApiDocsService)
       apiDocsService.generateDocumentation(app)
+      docsGenerated = apiDocsService.isDocumentGenerated()
     } catch (error) {
       logger.error(`Failed to generate API documentation: ${error.message}`)
     }
@@ -43,7 +45,7 @@ const bootstrap = async () => {
 
   logger.log(chalk.green('✨ Application is running on: ') + chalk.yellow(`[http://localhost:${env.get('PORT')}]`) + chalk.green(' ✨'))
 
-  if (env.get('NODE_ENV') === 'development') {
+  if (env.get('NODE_ENV') === 'development' && docsGenerated) {
     logger.log(chalk.green('📚 API Documentation available at: ') + chalk.yellow(`[http://localhost:${env.get('PORT')}/api/docs]`) + chalk.green(' 📚'))
   }
 }
