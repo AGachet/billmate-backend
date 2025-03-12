@@ -20,7 +20,7 @@ import { ApiDocsService } from '@modules/api-docs/services/api-docs.service'
       rootPath: join(process.cwd(), 'docs'),
       serveRoot: '/api/docs',
       serveStaticOptions: {
-        index: false
+        index: ['index.html']
       }
     })
   ],

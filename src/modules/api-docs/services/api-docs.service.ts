@@ -1,13 +1,16 @@
 /**
  * Resources
  */
+import { Injectable, Logger, INestApplication } from '@nestjs/common'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
-import { Injectable, Logger } from '@nestjs/common'
-import { OpenAPIObject } from '@nestjs/swagger'
 import { writeFileSync, existsSync, mkdirSync } from 'fs'
+import { OpenAPIObject } from '@nestjs/swagger'
 import { join } from 'path'
-import { INestApplication } from '@nestjs/common'
-import { openApiConfig } from '../configs/open-api.config'
+
+/**
+ * Dependencies
+ */
+import { openApiConfig } from '@configs/api-docs/open-api.config'
 
 /**
  * Declaration
@@ -17,11 +20,7 @@ export class ApiDocsService {
   private document: OpenAPIObject | null = null
   private readonly logger = new Logger(ApiDocsService.name)
 
-  /**
-   * Generates the OpenAPI documentation for the application
-   * @param app The NestJS application instance
-   * @returns The OpenAPI document containing all API routes and schemas
-   */
+  // Generates the OpenAPI documentation for the application
   generateDocumentation(app: INestApplication): OpenAPIObject {
     this.logger.log('Generating OpenAPI documentation...')
 
@@ -40,6 +39,7 @@ export class ApiDocsService {
       // Create docs directory at project root
       const docsPath = join(process.cwd(), 'docs')
       const apiDocsPath = join(process.cwd(), openApiConfig.outputPath)
+      const indexHtmlPath = join(docsPath, 'index.html')
 
       // Ensure directory exists
       if (!existsSync(docsPath)) {
@@ -51,11 +51,51 @@ export class ApiDocsService {
       writeFileSync(apiDocsPath, JSON.stringify(this.document, null, 2))
       this.logger.log(`OpenAPI documentation generated and saved to: ${apiDocsPath}`)
 
+      // Check if index.html exists, if not create it
+      if (!existsSync(indexHtmlPath)) {
+        this.logger.log(`Creating Stoplight Elements UI index.html at: ${indexHtmlPath}`)
+        this.generateStoplightHtml(indexHtmlPath)
+      }
+
       return this.document
     } catch (error) {
       this.logger.error(`Failed to generate OpenAPI documentation: ${error.message}`)
       throw error
     }
+  }
+
+  /**
+   * Generates a Stoplight Elements HTML file to display the API documentation
+   * @param filePath The path where the HTML file should be saved
+   */
+  private generateStoplightHtml(filePath: string): void {
+    const html = `<!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>BillMate API Documentation</title>
+
+        <!-- Stoplight Elements styles -->
+        <link rel="stylesheet" href="https://unpkg.com/@stoplight/elements/styles.min.css">
+
+      </head>
+      <body>
+        <!-- Stoplight Elements Web Component -->
+        <elements-api
+          apiDescriptionUrl="./openapi.json"
+          router="hash"
+          layout="sidebar"
+          hideExport="true"
+          hideInternal="true"
+        />
+
+        <!-- Stoplight Elements script -->
+        <script src="https://unpkg.com/@stoplight/elements/web-components.min.js"></script>
+      </body>
+      </html>`
+
+    writeFileSync(filePath, html)
   }
 
   // Returns the current OpenAPI document
