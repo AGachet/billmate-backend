@@ -1,20 +1,20 @@
 /**
  * Resources
  */
-import { Test, TestingModule } from '@nestjs/testing'
 import { INestApplication } from '@nestjs/common'
-import request from 'supertest'
-import * as dotenv from 'dotenv'
+import { Test, TestingModule } from '@nestjs/testing'
 import cookieParser from 'cookie-parser'
+import * as dotenv from 'dotenv'
+import request from 'supertest'
 
 /**
  * Dependencies
  */
-import { AuthModule } from '@modules/auth/auth.module'
 import { LoggerModule } from '@common/services/logger/logger.module'
-import { PrismaService } from '@configs/prisma/services/prisma.service'
 import { EnvModule } from '@configs/env/env.module'
 import { PrismaModule } from '@configs/prisma/prisma.module'
+import { PrismaService } from '@configs/prisma/services/prisma.service'
+import { AuthModule } from '@modules/auth/auth.module'
 
 // Load test environment variables
 dotenv.config({ path: '.env.test' })
@@ -101,7 +101,7 @@ describe('Auth Module (e2e)', () => {
   })
 
   describe('Complete authentication flow', () => {
-    it('1. Should create a new user (signup)', async () => {
+    it('Should create a new user (signup)', async () => {
       const response = await agent.post('/api/auth/signup').send(testUser).expect(200)
 
       expect(response.body).toHaveProperty('message')
@@ -123,7 +123,21 @@ describe('Auth Module (e2e)', () => {
       userId = user!.id
     })
 
-    it('2. Should confirm the creation and connect the user (signin with token)', async () => {
+    it('Should not allow login for unconfirmed account', async () => {
+      const response = await agent
+        .post('/api/auth/signin')
+        .send({
+          email: testUser.email,
+          password: testUser.password
+        })
+        .expect(401)
+
+      expect(response.body).toHaveProperty('message')
+      expect(response.body.message).toContain('Invalid email or password')
+      expect(response.body.message).not.toHaveProperty('userId')
+    })
+
+    it('Should confirm the creation and connect the user (signin with token)', async () => {
       const response = await agent
         .post('/api/auth/signin')
         .send({
@@ -144,7 +158,7 @@ describe('Auth Module (e2e)', () => {
       expect(user?.isActive).toBe(true)
     })
 
-    it('3. Should logout the user (signout)', async () => {
+    it('Should logout the user (signout)', async () => {
       const response = await agent.post('/api/auth/signout').send({ userId }).expect(200)
 
       expect(response.body).toHaveProperty('message')
@@ -153,7 +167,7 @@ describe('Auth Module (e2e)', () => {
       await agent.get('/api/auth/me').expect(401)
     })
 
-    it('4. Should request a password change (request-password-reset)', async () => {
+    it('Should request a password change (request-password-reset)', async () => {
       const response = await agent.post('/api/auth/request-password-reset').send({ email: testUser.email }).expect(200)
 
       expect(response.body).toHaveProperty('message')
@@ -165,7 +179,7 @@ describe('Auth Module (e2e)', () => {
       expect(resetPasswordToken).toBeDefined()
     })
 
-    it('5. Should change the password (reset-password)', async () => {
+    it('Should change the password (reset-password)', async () => {
       const newPassword = 'NewBruceWayne123'
 
       const response = await agent
@@ -183,7 +197,7 @@ describe('Auth Module (e2e)', () => {
       testUser.password = newPassword
     })
 
-    it('6. Should connect with the new password (signin)', async () => {
+    it('Should connect with the new password (signin)', async () => {
       const response = await agent
         .post('/api/auth/signin')
         .send({
@@ -196,7 +210,7 @@ describe('Auth Module (e2e)', () => {
       expect(response.body.userId).toBe(userId)
     })
 
-    it("7. Should retrieve the user's information (me)", async () => {
+    it("Should retrieve the user's information (me)", async () => {
       const response = await agent.get('/api/auth/me').expect(200)
 
       expect(response.body).toHaveProperty('userId')
