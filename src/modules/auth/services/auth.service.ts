@@ -1,37 +1,37 @@
 /**
  * Resources
  */
-import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common'
+import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common'
 import { JwtService } from '@nestjs/jwt'
-import { Response } from 'express'
 import * as bcrypt from 'bcrypt'
+import { Response } from 'express'
 import ms from 'ms'
 
 /**
  * Dependencies
  */
-import { PrismaService } from '@configs/prisma/services/prisma.service'
 import { Logger } from '@common/services/logger/logger.service'
-import { EnvConfig } from '@configs/env/services/env.service'
 import { UserDefaults } from '@configs/db/user.config'
+import { EnvConfig } from '@configs/env/services/env.service'
+import { PrismaService } from '@configs/prisma/services/prisma.service'
 
 /**
  * Type
  */
 import type { User, UserToken } from '@prisma/client'
 
-import type { SignUpDto } from '@modules/auth/dto/requests/signup.dto'
+import type { RequestPasswordResetDto } from '@modules/auth/dto/requests/request-password-reset.dto'
+import type { ResetPasswordDto } from '@modules/auth/dto/requests/reset-password.dto'
 import type { SignInDto } from '@modules/auth/dto/requests/signin.dto'
 import type { SignOutDto } from '@modules/auth/dto/requests/signout.dto'
-import type { ResetPasswordDto } from '@modules/auth/dto/requests/reset-password.dto'
-import type { RequestPasswordResetDto } from '@modules/auth/dto/requests/request-password-reset.dto'
+import type { SignUpDto } from '@modules/auth/dto/requests/signup.dto'
 
-import type { SignUpResponseDto } from '@modules/auth/dto/responses/signup.response.dto'
-import type { SignInResponseDto } from '@modules/auth/dto/responses/signin.response.dto'
-import type { SignOutResponseDto } from '@modules/auth/dto/responses/signout.response.dto'
+import type { MeResponseDto } from '@modules/auth/dto/responses/me.response.dto'
 import type { RequestPasswordResetResponseDto } from '@modules/auth/dto/responses/request-password-reset.response.dto'
 import type { ResetPasswordResponseDto } from '@modules/auth/dto/responses/reset-password.response.dto'
-import type { MeResponseDto } from '@modules/auth/dto/responses/me.response.dto'
+import type { SignInResponseDto } from '@modules/auth/dto/responses/signin.response.dto'
+import type { SignOutResponseDto } from '@modules/auth/dto/responses/signout.response.dto'
+import type { SignUpResponseDto } from '@modules/auth/dto/responses/signup.response.dto'
 
 export interface TokenPayload {
   email: string
@@ -95,15 +95,8 @@ export class AuthService {
       }
     )
 
-    // Save the token in the database
-    await this.prisma.userToken.create({
-      data: {
-        userId: user.id,
-        token: confirmationToken,
-        type: 'ACCOUNT_VALIDATION',
-        expiresAt: new Date(Date.now() + ms(this.env.get('JWT_CREATE_ACCOUNT_EXPIRES_IN')))
-      }
-    })
+    // Save the token in the database (will delete any existing token of same type)
+    await this.createUniqueToken(user.id, confirmationToken, 'ACCOUNT_VALIDATION', this.env.get('JWT_CREATE_ACCOUNT_EXPIRES_IN'))
 
     // Log the token in development and test
     if (['development', 'test'].includes(this.env.get('NODE_ENV'))) {
@@ -219,15 +212,8 @@ export class AuthService {
       }
     )
 
-    // Save token in database
-    await this.prisma.userToken.create({
-      data: {
-        userId: user.id,
-        token: resetToken,
-        type: 'PASSWORD_RESET',
-        expiresAt: new Date(Date.now() + ms(this.env.get('JWT_RESET_PASSWORD_EXPIRES_IN')))
-      }
-    })
+    // Save token in database (will delete any existing token of same type)
+    await this.createUniqueToken(user.id, resetToken, 'PASSWORD_RESET', this.env.get('JWT_RESET_PASSWORD_EXPIRES_IN'))
 
     // Return token in development and test
     if (['development', 'test'].includes(this.env.get('NODE_ENV'))) {
@@ -413,6 +399,26 @@ export class AuthService {
     return user
   }
 
+  private async createUniqueToken(userId: string, token: string, type: 'ACCOUNT_VALIDATION' | 'PASSWORD_RESET' | 'SESSION_REFRESH', expiresIn: ms.StringValue): Promise<UserToken> {
+    // Delete any existing token of the same type for this user
+    await this.prisma.userToken.deleteMany({
+      where: {
+        userId,
+        type
+      }
+    })
+
+    // Create new token
+    return this.prisma.userToken.create({
+      data: {
+        userId,
+        token,
+        type,
+        expiresAt: new Date(Date.now() + ms(expiresIn))
+      }
+    })
+  }
+
   private async activateUserAccount(userId: string, email: string, confirmAccountToken: string): Promise<User> {
     await this.verifyToken(confirmAccountToken, this.env.get('JWT_SECRET_CONFIRM_ACCOUNT'))
 
@@ -479,15 +485,8 @@ export class AuthService {
       expiresIn: this.env.get('JWT_REFRESH_EXPIRES_IN')
     })
 
-    // Store the new refresh token in the UserTokens table
-    await this.prisma.userToken.create({
-      data: {
-        userId: user.id,
-        token: refreshToken,
-        type: 'SESSION_REFRESH',
-        expiresAt: new Date(Date.now() + ms(this.env.get('JWT_REFRESH_EXPIRES_IN')))
-      }
-    })
+    // Store the new refresh token in the UserTokens table (will delete any existing token of same type)
+    await this.createUniqueToken(user.id, refreshToken, 'SESSION_REFRESH', this.env.get('JWT_REFRESH_EXPIRES_IN'))
 
     this.logger.debug(`Tokens generated successfully for ${user.email}`, 'generateTokens')
     return { accessToken, refreshToken }
