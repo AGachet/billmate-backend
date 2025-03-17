@@ -379,6 +379,7 @@ export class AuthService {
       userId: user.id,
       firstname: user.firstname,
       lastname: user.lastname,
+      email: user.email,
       roles,
       modules,
       permissions,
