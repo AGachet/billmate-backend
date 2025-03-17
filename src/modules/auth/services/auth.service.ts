@@ -131,6 +131,12 @@ export class AuthService {
     // Validate user
     const user = await this.validateUser(email, password)
 
+    // Check if account is active or if confirmation token is provided
+    if (!user.isActive && !confirmAccountToken) {
+      this.logger.warn(`Login attempt for inactive account: ${email}`, 'signIn')
+      throw new UnauthorizedException('Invalid email or password')
+    }
+
     // Activate user account if a token is provided
     if (confirmAccountToken) await this.activateUserAccount(user.id, email, confirmAccountToken)
 
