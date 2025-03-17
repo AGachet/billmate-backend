@@ -1,19 +1,19 @@
 /**
  * Resources
  */
-import { UnauthorizedException, BadRequestException } from '@nestjs/common'
-import { Test, TestingModule } from '@nestjs/testing'
+import { BadRequestException, UnauthorizedException } from '@nestjs/common'
 import { JwtService } from '@nestjs/jwt'
+import { Test, TestingModule } from '@nestjs/testing'
 import * as bcrypt from 'bcrypt'
 
 /**
  * Dependencies
  */
+import { Logger } from '@common/services/logger/logger.service'
+import { EnvConfig } from '@configs/env/services/env.service'
 import { PrismaService } from '@configs/prisma/services/prisma.service'
 import { mockChalk, mockWinston } from '@configs/test/unit-mocks-glob'
 import { AuthService } from '@modules/auth/services/auth.service'
-import { Logger } from '@common/services/logger/logger.service'
-import { EnvConfig } from '@configs/env/services/env.service'
 
 /**
  * Type
@@ -417,6 +417,7 @@ describe('AuthService', () => {
         userId: mockUser.id,
         firstname: mockUser.firstname,
         lastname: mockUser.lastname,
+        email: mockUser.email,
         roles: ['USER'],
         modules: ['USER_ACCOUNT'],
         permissions: ['READ_OWN_PROFILE'],

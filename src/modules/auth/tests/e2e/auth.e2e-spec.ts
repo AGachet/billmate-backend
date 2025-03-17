@@ -207,6 +207,7 @@ describe('Auth Module (e2e)', () => {
       expect(response.body.userId).toBe(userId)
       expect(response.body.firstname).toBe(testUser.firstname)
       expect(response.body.lastname).toBe(testUser.lastname)
+      expect(response.body.email).toBe(testUser.email)
       expect(response.body.roles).toEqual(['user'])
     })
   })
