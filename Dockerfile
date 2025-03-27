@@ -63,8 +63,8 @@ RUN npm prune --production
 ENV NODE_ENV=production
 ENV PORT=3500
 
-# Create logs directory
-RUN mkdir -p logs && chown -R nestjs:nodejs logs
+# Create necessary directories with proper permissions
+RUN mkdir -p logs docs && chown -R nestjs:nodejs logs docs
 
 # Switch to non-root user
 USER nestjs
