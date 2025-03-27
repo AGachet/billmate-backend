@@ -19,14 +19,22 @@ jobs:
     name: Check if tests passed
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }}
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+
       - name: Install GitHub CLI
         run: sudo apt-get install gh -y
 
       - name: Check test status
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           if [ "${{ github.event_name }}" = "push" ]; then
             # Check if tests have passed for this specific commit
-            gh run list --workflow=test.yml --branch=master --status=success --limit=1 --head_sha=${{ github.sha }}
+            gh run list --workflow=test.yml --branch=master --status=success --limit=1 --commit=${{ github.sha }}
             if [ $? -ne 0 ]; then
               echo "Tests have not passed for commit ${{ github.sha }}. Deployment blocked."
               exit 1
@@ -35,6 +43,8 @@ jobs:
 
       - name: Print last failed test run
         if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           echo "Last 5 test runs:"
           gh run list --workflow=test.yml --limit=5
