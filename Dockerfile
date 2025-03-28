@@ -6,10 +6,13 @@ WORKDIR /app
 
 # Copy package files for dependency installation
 COPY package*.json ./
-COPY scripts ./scripts
+COPY prisma ./prisma
 
 # Install all dependencies (including devDependencies)
 RUN npm ci
+
+# Generate Prisma Client
+RUN npx prisma generate
 
 
 ####################
@@ -18,12 +21,10 @@ RUN npm ci
 FROM node:22-alpine AS builder
 WORKDIR /app
 
-# Copy dependencies before building
+# Copy dependencies and source code
 COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/node_modules/.prisma ./node_modules/.prisma
 COPY . .
-
-# Generate Prisma Client before TypeScript compilation
-RUN npx prisma generate
 
 # Build application
 RUN npm run build
@@ -47,17 +48,14 @@ RUN apk add --no-cache postgresql-client dumb-init
 RUN addgroup -g 1001 -S nodejs
 RUN adduser -S nestjs -u 1001
 
-# Copy built application
+# Copy built application and dependencies
 COPY --from=builder --chown=nestjs:nodejs /app/dist ./dist
-COPY --from=deps --chown=nestjs:nodejs /app/node_modules ./node_modules
-COPY --from=builder --chown=nestjs:nodejs /app/package.json ./package.json
+COPY --from=deps --chown=nestjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder --chown=nestjs:nodejs /app/package*.json ./
 
-# Copy Prisma files
-COPY --from=builder --chown=nestjs:nodejs /app/prisma ./prisma
-COPY --from=builder --chown=nestjs:nodejs /app/scripts ./scripts
-
-# Prune development dependencies
-RUN npm prune --production
+# Install production dependencies only
+ENV HUSKY=0
+RUN npm ci --omit=dev
 
 # Set environment variables
 ENV NODE_ENV=production
@@ -79,5 +77,5 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=30s \
 # Use dumb-init as PID 1 to handle signals properly
 ENTRYPOINT ["/usr/bin/dumb-init", "--"]
 
-# Generate Prisma client and run migrations at startup
-CMD ["/bin/sh", "-c", "npx prisma generate && npx prisma migrate deploy && node dist/main.js"]
+# Start the application
+CMD ["node", "dist/main.js"]
