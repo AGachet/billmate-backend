@@ -120,7 +120,7 @@ jobs:
           ssh cinas-ext 'mkdir -p ${{ secrets.NAS_BACKEND_PATH }}/{logs,prisma,scripts}'
 
           # Create network if it doesn't exist
-          ssh cinas-ext 'docker network inspect billmate-network >/dev/null 2>&1 || docker network create billmate-network'
+          ssh cinas-ext '/usr/local/bin/docker network inspect billmate-network >/dev/null 2>&1 || /usr/local/bin/docker network create billmate-network'
 
           # Copy docker-compose.yml to NAS
           scp docker-compose.yml cinas-ext:${{ secrets.NAS_BACKEND_PATH }}/
@@ -160,4 +160,4 @@ jobs:
           EOF'
 
           # Deploy the container
-          ssh cinas-ext 'cd ${{ secrets.NAS_BACKEND_PATH }} && docker compose pull && docker compose up -d'
+          ssh cinas-ext 'cd ${{ secrets.NAS_BACKEND_PATH }} && /usr/local/bin/docker compose pull && /usr/local/bin/docker compose up -d'
