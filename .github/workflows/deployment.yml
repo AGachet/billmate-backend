@@ -122,8 +122,8 @@ jobs:
           # Create network if it doesn't exist
           ssh cinas-ext '/usr/local/bin/docker network inspect billmate-network >/dev/null 2>&1 || /usr/local/bin/docker network create billmate-network'
 
-          # Copy docker-compose.yml to NAS
-          scp docker-compose.yml cinas-ext:${{ secrets.NAS_BACKEND_PATH }}/
+          # Copy docker-compose.yml to NAS using rsync
+          rsync -avz -e "ssh -i ~/.ssh/id_rsa" docker-compose.yml cinas-ext:${{ secrets.NAS_BACKEND_PATH }}/
 
           # Update image in docker-compose.yml on NAS
           ssh cinas-ext 'sed -i "s|image: billmate-backend|image: ghcr.io/${{ github.repository }}:latest|" ${{ secrets.NAS_BACKEND_PATH }}/docker-compose.yml'
