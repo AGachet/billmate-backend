@@ -152,10 +152,10 @@ jobs:
           ssh cinas-ext "if [ -f ${{ secrets.NAS_BACKEND_PATH }}/docker-compose.yml ]; then cp ${{ secrets.NAS_BACKEND_PATH }}/docker-compose.yml ${{ secrets.NAS_BACKEND_PATH }}/docker-compose.yml.backup; fi"
           check_ssh_status "Backup creation" "cp docker-compose.yml"
 
-          # Copy docker-compose.yml to NAS using scp
+          # Copy docker-compose.yml to NAS using cat and SSH
           echo "Copying docker-compose.yml to NAS..."
-          scp docker-compose.yml cinas-ext:"${{ secrets.NAS_BACKEND_PATH }}/"
-          check_ssh_status "File copy" "scp docker-compose.yml"
+          cat docker-compose.yml | ssh cinas-ext "cat > ${{ secrets.NAS_BACKEND_PATH }}/docker-compose.yml"
+          check_ssh_status "File copy" "cat docker-compose.yml"
 
           # Update image in docker-compose.yml on NAS using yq
           echo "Updating image in docker-compose.yml..."
