@@ -114,24 +114,54 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           echo -e "Host cinas-ext\n  HostName ${{ secrets.NAS_HOST }}\n  Port ${{ secrets.NAS_PORT }}\n  User ${{ secrets.NAS_USER }}\n  IdentityFile ~/.ssh/id_rsa\n  StrictHostKeyChecking no" >> ~/.ssh/config
 
+      - name: Setup NAS directories
+        run: |
+          # Create base directory with proper permissions
+          ssh cinas-ext "mkdir -p ${{ secrets.NAS_BACKEND_PATH }} && chmod 755 ${{ secrets.NAS_BACKEND_PATH }}"
+
+          # Create subdirectories with proper permissions
+          ssh cinas-ext "mkdir -p ${{ secrets.NAS_BACKEND_PATH }}/{logs,prisma,scripts} && chmod 755 ${{ secrets.NAS_BACKEND_PATH }}/{logs,prisma,scripts}"
+
+      - name: Check Docker version on NAS
+        run: |
+          DOCKER_VERSION=$(ssh cinas-ext '/usr/local/bin/docker --version')
+          echo "Docker version on NAS: $DOCKER_VERSION"
+          if ! ssh cinas-ext '/usr/local/bin/docker info >/dev/null 2>&1'; then
+            echo "Docker daemon is not running on NAS"
+            exit 1
+          fi
+
       - name: Deploy backend container
         run: |
-          # Create necessary directories on NAS
-          ssh cinas-ext 'mkdir -p ${{ secrets.NAS_BACKEND_PATH }}/{logs,prisma,scripts}'
+          # Function to check SSH command status
+          check_ssh_status() {
+            if [ $? -ne 0 ]; then
+              echo "Error executing SSH command"
+              exit 1
+            fi
+          }
 
           # Create network if it doesn't exist
           ssh cinas-ext '/usr/local/bin/docker network inspect billmate-network >/dev/null 2>&1 || /usr/local/bin/docker network create billmate-network'
+          check_ssh_status
+
+          # Backup current docker-compose.yml if it exists
+          ssh cinas-ext 'if [ -f ${{ secrets.NAS_BACKEND_PATH }}/docker-compose.yml ]; then cp ${{ secrets.NAS_BACKEND_PATH }}/docker-compose.yml ${{ secrets.NAS_BACKEND_PATH }}/docker-compose.yml.backup; fi'
+          check_ssh_status
 
           # Copy docker-compose.yml to NAS using rsync
-          rsync -avz -e "ssh -i ~/.ssh/id_rsa" docker-compose.yml cinas-ext:${{ secrets.NAS_BACKEND_PATH }}/
+          rsync -avz docker-compose.yml cinas-ext:${{ secrets.NAS_BACKEND_PATH }}/
+          check_ssh_status
 
-          # Update image in docker-compose.yml on NAS
-          ssh cinas-ext 'sed -i "s|image: billmate-backend|image: ghcr.io/${{ github.repository }}:latest|" ${{ secrets.NAS_BACKEND_PATH }}/docker-compose.yml'
+          # Update image in docker-compose.yml on NAS using yq (more reliable than sed)
+          ssh cinas-ext 'yq eval ".services.backend.image = \"ghcr.io/${{ github.repository }}:latest\"" -i ${{ secrets.NAS_BACKEND_PATH }}/docker-compose.yml'
+          check_ssh_status
 
-          # Remove port exposure in docker-compose.yml on NAS
-          ssh cinas-ext 'sed -i "/ports:/,/3500/d" ${{ secrets.NAS_BACKEND_PATH }}/docker-compose.yml'
+          # Remove port exposure in docker-compose.yml on NAS using yq
+          ssh cinas-ext 'yq eval "del(.services.backend.ports)" -i ${{ secrets.NAS_BACKEND_PATH }}/docker-compose.yml'
+          check_ssh_status
 
-          # Create .env file from secrets
+          # Create encrypted .env file from secrets
           ssh cinas-ext 'cat <<EOF > ${{ secrets.NAS_BACKEND_PATH }}/.env
           # Server Configuration
           PORT="3500"
@@ -158,6 +188,57 @@ jobs:
           LOG_LEVEL="info"
           LOG_DIR="logs"
           EOF'
+          check_ssh_status
 
-          # Deploy the container
+          # Set proper permissions for .env file
+          ssh cinas-ext 'chmod 600 ${{ secrets.NAS_BACKEND_PATH }}/.env'
+          check_ssh_status
+
+          # Check if deployment is possible
+          echo "Checking if deployment is possible..."
+          if ssh cinas-ext 'cd ${{ secrets.NAS_BACKEND_PATH }} && /usr/local/bin/docker compose ps backend --status running | grep -q "backend"'; then
+            echo "Backend is already running. Proceeding with deployment..."
+          else
+            echo "No backend is currently running. Proceeding with fresh deployment..."
+          fi
+
+          # Clean up old images and containers
+          ssh cinas-ext 'cd ${{ secrets.NAS_BACKEND_PATH }} && /usr/local/bin/docker compose down --remove-orphans'
+          check_ssh_status
+
+          # Pull and deploy the container
           ssh cinas-ext 'cd ${{ secrets.NAS_BACKEND_PATH }} && /usr/local/bin/docker compose pull && /usr/local/bin/docker compose up -d'
+          check_ssh_status
+
+          # Wait for container to be healthy
+          echo "Waiting for container to be healthy..."
+          for i in {1..30}; do
+            if ssh cinas-ext 'cd ${{ secrets.NAS_BACKEND_PATH }} && /usr/local/bin/docker compose ps backend --format json | jq -e ".Health == \"healthy\"" >/dev/null 2>&1'; then
+              echo "Container is healthy!"
+              break
+            fi
+            if [ $i -eq 30 ]; then
+              echo "Container failed to become healthy within 30 seconds"
+              ssh cinas-ext 'cd ${{ secrets.NAS_BACKEND_PATH }} && /usr/local/bin/docker compose logs backend'
+              exit 1
+            fi
+            sleep 1
+          done
+
+          # Setup log rotation
+          ssh cinas-ext 'cat <<EOF > ${{ secrets.NAS_BACKEND_PATH }}/scripts/logrotate.conf
+          ${{ secrets.NAS_BACKEND_PATH }}/logs/*.log {
+              daily
+              rotate 7
+              compress
+              delaycompress
+              missingok
+              notifempty
+              create 0640 ${{ secrets.NAS_USER }} ${{ secrets.NAS_USER }}
+          }
+          EOF'
+          check_ssh_status
+
+          # Add logrotate to crontab if not already present
+          ssh cinas-ext 'crontab -l | grep -q "logrotate" || (crontab -l 2>/dev/null; echo "0 0 * * * /usr/sbin/logrotate ${{ secrets.NAS_BACKEND_PATH }}/scripts/logrotate.conf") | crontab -'
+          check_ssh_status
