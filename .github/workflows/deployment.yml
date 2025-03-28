@@ -152,20 +152,20 @@ jobs:
           ssh cinas-ext "if [ -f ${{ secrets.NAS_BACKEND_PATH }}/docker-compose.yml ]; then cp ${{ secrets.NAS_BACKEND_PATH }}/docker-compose.yml ${{ secrets.NAS_BACKEND_PATH }}/docker-compose.yml.backup; fi"
           check_ssh_status "Backup creation" "cp docker-compose.yml"
 
-          # Copy docker-compose.yml to NAS using cat and SSH
+          # Copy docker-compose.yml
           echo "Copying docker-compose.yml to NAS..."
           cat docker-compose.yml | ssh cinas-ext "cat > ${{ secrets.NAS_BACKEND_PATH }}/docker-compose.yml"
           check_ssh_status "File copy" "cat docker-compose.yml"
 
-          # Update image in docker-compose.yml on NAS using yq
+          # Update image in docker-compose.yml
           echo "Updating image in docker-compose.yml..."
-          ssh cinas-ext "yq eval '.services.backend.image = \"ghcr.io/${{ github.repository }}:latest\"' -i ${{ secrets.NAS_BACKEND_PATH }}/docker-compose.yml"
-          check_ssh_status "Image update" "yq eval"
+          ssh cinas-ext "sed -i 's|image: .*|image: ghcr.io/${{ github.repository }}:latest|' ${{ secrets.NAS_BACKEND_PATH }}/docker-compose.yml"
+          check_ssh_status "Image update" "sed image"
 
-          # Remove port exposure in docker-compose.yml on NAS using yq
+          # Remove port exposure in docker-compose.yml
           echo "Removing port exposure..."
-          ssh cinas-ext "yq eval 'del(.services.backend.ports)' -i ${{ secrets.NAS_BACKEND_PATH }}/docker-compose.yml"
-          check_ssh_status "Port removal" "yq eval del"
+          ssh cinas-ext "sed -i '/ports:/,/3500/d' ${{ secrets.NAS_BACKEND_PATH }}/docker-compose.yml"
+          check_ssh_status "Port removal" "sed ports"
 
           # Create encrypted .env file from secrets
           echo "Creating .env file..."
