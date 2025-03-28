@@ -136,32 +136,39 @@ jobs:
           # Function to check SSH command status
           check_ssh_status() {
             if [ $? -ne 0 ]; then
-              echo "Error executing SSH command"
+              echo "Error executing SSH command: $1"
+              echo "Last command failed: $2"
               exit 1
             fi
           }
 
           # Create network if it doesn't exist
+          echo "Creating network if it doesn't exist..."
           ssh cinas-ext "/usr/local/bin/docker network inspect billmate-network >/dev/null 2>&1 || /usr/local/bin/docker network create billmate-network"
-          check_ssh_status
+          check_ssh_status "Network creation" "docker network inspect/create"
 
           # Backup current docker-compose.yml if it exists
+          echo "Backing up docker-compose.yml..."
           ssh cinas-ext "if [ -f ${{ secrets.NAS_BACKEND_PATH }}/docker-compose.yml ]; then cp ${{ secrets.NAS_BACKEND_PATH }}/docker-compose.yml ${{ secrets.NAS_BACKEND_PATH }}/docker-compose.yml.backup; fi"
-          check_ssh_status
+          check_ssh_status "Backup creation" "cp docker-compose.yml"
 
           # Copy docker-compose.yml to NAS using scp
+          echo "Copying docker-compose.yml to NAS..."
           scp docker-compose.yml cinas-ext:"${{ secrets.NAS_BACKEND_PATH }}/"
-          check_ssh_status
+          check_ssh_status "File copy" "scp docker-compose.yml"
 
-          # Update image in docker-compose.yml on NAS using yq (more reliable than sed)
+          # Update image in docker-compose.yml on NAS using yq
+          echo "Updating image in docker-compose.yml..."
           ssh cinas-ext "yq eval '.services.backend.image = \"ghcr.io/${{ github.repository }}:latest\"' -i ${{ secrets.NAS_BACKEND_PATH }}/docker-compose.yml"
-          check_ssh_status
+          check_ssh_status "Image update" "yq eval"
 
           # Remove port exposure in docker-compose.yml on NAS using yq
+          echo "Removing port exposure..."
           ssh cinas-ext "yq eval 'del(.services.backend.ports)' -i ${{ secrets.NAS_BACKEND_PATH }}/docker-compose.yml"
-          check_ssh_status
+          check_ssh_status "Port removal" "yq eval del"
 
           # Create encrypted .env file from secrets
+          echo "Creating .env file..."
           ssh cinas-ext "cat <<EOF > ${{ secrets.NAS_BACKEND_PATH }}/.env
           # Server Configuration
           PORT=\"3500\"
@@ -188,11 +195,12 @@ jobs:
           LOG_LEVEL=\"info\"
           LOG_DIR=\"logs\"
           EOF"
-          check_ssh_status
+          check_ssh_status "Env file creation" "cat > .env"
 
           # Set proper permissions for .env file
+          echo "Setting .env file permissions..."
           ssh cinas-ext "chmod 600 ${{ secrets.NAS_BACKEND_PATH }}/.env"
-          check_ssh_status
+          check_ssh_status "Permission setting" "chmod .env"
 
           # Check if deployment is possible
           echo "Checking if deployment is possible..."
@@ -203,12 +211,14 @@ jobs:
           fi
 
           # Clean up old images and containers
+          echo "Cleaning up old containers..."
           ssh cinas-ext "cd ${{ secrets.NAS_BACKEND_PATH }} && /usr/local/bin/docker compose down --remove-orphans"
-          check_ssh_status
+          check_ssh_status "Container cleanup" "docker compose down"
 
           # Pull and deploy the container
+          echo "Pulling and deploying new container..."
           ssh cinas-ext "cd ${{ secrets.NAS_BACKEND_PATH }} && /usr/local/bin/docker compose pull && /usr/local/bin/docker compose up -d"
-          check_ssh_status
+          check_ssh_status "Container deployment" "docker compose up"
 
           # Wait for container to be healthy
           echo "Waiting for container to be healthy..."
@@ -225,20 +235,28 @@ jobs:
             sleep 1
           done
 
-          # Setup log rotation
-          ssh cinas-ext "cat <<EOF > ${{ secrets.NAS_BACKEND_PATH }}/scripts/logrotate.conf
-          ${{ secrets.NAS_BACKEND_PATH }}/logs/*.log {
-              daily
-              rotate 7
-              compress
-              delaycompress
-              missingok
-              notifempty
-              create 0640 ${{ secrets.NAS_USER }} ${{ secrets.NAS_USER }}
-          }
-          EOF"
-          check_ssh_status
+          # Setup log rotation (optional)
+          echo "Setting up log rotation..."
+          if ssh cinas-ext "which logrotate >/dev/null 2>&1"; then
+            # Create logrotate config
+            ssh cinas-ext "cat <<EOF > ${{ secrets.NAS_BACKEND_PATH }}/scripts/logrotate.conf
+            ${{ secrets.NAS_BACKEND_PATH }}/logs/*.log {
+                daily
+                rotate 7
+                compress
+                delaycompress
+                missingok
+                notifempty
+                create 0640 ${{ secrets.NAS_USER }} ${{ secrets.NAS_USER }}
+            }
+            EOF"
 
-          # Add logrotate to crontab if not already present
-          ssh cinas-ext "crontab -l | grep -q 'logrotate' || (crontab -l 2>/dev/null; echo '0 0 * * * /usr/sbin/logrotate ${{ secrets.NAS_BACKEND_PATH }}/scripts/logrotate.conf') | crontab -"
-          check_ssh_status
+            # Try to setup crontab, but don't fail if it doesn't work
+            if ssh cinas-ext "crontab -l >/dev/null 2>&1"; then
+              ssh cinas-ext "crontab -l | grep -q 'logrotate' || (crontab -l 2>/dev/null; echo '0 0 * * * /usr/sbin/logrotate ${{ secrets.NAS_BACKEND_PATH }}/scripts/logrotate.conf') | crontab -"
+            else
+              echo "Warning: Could not access crontab. Log rotation will need to be configured manually."
+            fi
+          else
+            echo "Warning: logrotate is not installed. Log rotation will need to be configured manually."
+          fi
