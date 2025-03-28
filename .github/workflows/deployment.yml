@@ -99,3 +99,65 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  deploy-to-nas:
+    name: Deploy to NAS
+    needs: [docker-push]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.CI_DEPLOY_NAS_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          echo -e "Host cinas-ext\n  HostName ${{ secrets.NAS_HOST }}\n  Port ${{ secrets.NAS_PORT }}\n  User ${{ secrets.NAS_USER }}\n  IdentityFile ~/.ssh/id_rsa\n  StrictHostKeyChecking no" >> ~/.ssh/config
+
+      - name: Deploy backend container
+        run: |
+          # Create necessary directories on NAS
+          ssh cinas-ext 'mkdir -p ${{ secrets.NAS_BACKEND_PATH }}/{logs,prisma,scripts}'
+
+          # Create network if it doesn't exist
+          ssh cinas-ext 'docker network inspect billmate-network >/dev/null 2>&1 || docker network create billmate-network'
+
+          # Copy docker-compose.yml to NAS
+          scp docker-compose.yml cinas-ext:${{ secrets.NAS_BACKEND_PATH }}/
+
+          # Update image in docker-compose.yml on NAS
+          ssh cinas-ext 'sed -i "s|image: billmate-backend|image: ghcr.io/${{ github.repository }}:latest|" ${{ secrets.NAS_BACKEND_PATH }}/docker-compose.yml'
+
+          # Remove port exposure in docker-compose.yml on NAS
+          ssh cinas-ext 'sed -i "/ports:/,/3500/d" ${{ secrets.NAS_BACKEND_PATH }}/docker-compose.yml'
+
+          # Create .env file from secrets
+          ssh cinas-ext 'cat <<EOF > ${{ secrets.NAS_BACKEND_PATH }}/.env
+          # Server Configuration
+          PORT="3500"
+          NODE_ENV="production"
+
+          # Database Configuration
+          DATABASE_URL="${{ secrets.DATABASE_URL }}"
+          DIRECT_URL="${{ secrets.DIRECT_URL }}"
+
+          # API Configuration
+          API_PREFIX="/api"
+
+          # JWT Configuration
+          JWT_AUTH_EXPIRES_IN="15m"
+          JWT_REFRESH_EXPIRES_IN="7d"
+          JWT_CREATE_ACCOUNT_EXPIRES_IN="24h"
+          JWT_RESET_PASSWORD_EXPIRES_IN="1h"
+          JWT_SECRET_AUTH="${{ secrets.JWT_SECRET_AUTH }}"
+          JWT_SECRET_REFRESH="${{ secrets.JWT_SECRET_REFRESH }}"
+          JWT_SECRET_CONFIRM_ACCOUNT="${{ secrets.JWT_SECRET_CONFIRM_ACCOUNT }}"
+          JWT_SECRET_RESET_PASSWORD="${{ secrets.JWT_SECRET_RESET_PASSWORD }}"
+
+          # Log Configuration
+          LOG_LEVEL="info"
+          LOG_DIR="logs"
+          EOF'
+
+          # Deploy the container
+          ssh cinas-ext 'cd ${{ secrets.NAS_BACKEND_PATH }} && docker compose pull && docker compose up -d'
