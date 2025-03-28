@@ -204,7 +204,7 @@ jobs:
 
           # Check if deployment is possible
           echo "Checking if deployment is possible..."
-          if ssh cinas-ext "cd ${{ secrets.NAS_BACKEND_PATH }} && /usr/local/bin/docker compose ps backend --status running | grep -q 'backend'"; then
+          if ssh cinas-ext "cd ${{ secrets.NAS_BACKEND_PATH }} && /usr/local/bin/docker-compose ps | grep -q 'backend'"; then
             echo "Backend is already running. Proceeding with deployment..."
           else
             echo "No backend is currently running. Proceeding with fresh deployment..."
@@ -212,24 +212,24 @@ jobs:
 
           # Clean up old images and containers
           echo "Cleaning up old containers..."
-          ssh cinas-ext "cd ${{ secrets.NAS_BACKEND_PATH }} && /usr/local/bin/docker compose down --remove-orphans"
-          check_ssh_status "Container cleanup" "docker compose down"
+          ssh cinas-ext "cd ${{ secrets.NAS_BACKEND_PATH }} && /usr/local/bin/docker-compose down"
+          check_ssh_status "Container cleanup" "docker-compose down"
 
           # Pull and deploy the container
           echo "Pulling and deploying new container..."
-          ssh cinas-ext "cd ${{ secrets.NAS_BACKEND_PATH }} && /usr/local/bin/docker compose pull && /usr/local/bin/docker compose up -d"
-          check_ssh_status "Container deployment" "docker compose up"
+          ssh cinas-ext "cd ${{ secrets.NAS_BACKEND_PATH }} && /usr/local/bin/docker-compose pull && /usr/local/bin/docker-compose up -d"
+          check_ssh_status "Container deployment" "docker-compose up"
 
           # Wait for container to be healthy
           echo "Waiting for container to be healthy..."
           for i in {1..30}; do
-            if ssh cinas-ext "cd ${{ secrets.NAS_BACKEND_PATH }} && /usr/local/bin/docker compose ps backend --format json | jq -e '.Health == \"healthy\"' >/dev/null 2>&1"; then
+            if ssh cinas-ext "cd ${{ secrets.NAS_BACKEND_PATH }} && /usr/local/bin/docker-compose ps | grep -q 'backend.*Up'"; then
               echo "Container is healthy!"
               break
             fi
             if [ $i -eq 30 ]; then
               echo "Container failed to become healthy within 30 seconds"
-              ssh cinas-ext "cd ${{ secrets.NAS_BACKEND_PATH }} && /usr/local/bin/docker compose logs backend"
+              ssh cinas-ext "cd ${{ secrets.NAS_BACKEND_PATH }} && /usr/local/bin/docker-compose logs backend"
               exit 1
             fi
             sleep 1
