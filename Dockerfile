@@ -38,8 +38,8 @@ LABEL org.opencontainers.image.licenses="MIT"
 RUN apk add --no-cache postgresql-client dumb-init python3 make g++
 
 # Create app user
-RUN addgroup -g 1001 -S nodejs
-RUN adduser -S nestjs -u 1001
+RUN addgroup -S users || true
+RUN adduser -S ci-deploy -u 1031 -G users
 
 # Copy package files separately for better caching
 COPY package.json ./
@@ -48,20 +48,20 @@ COPY prisma ./prisma
 
 # Install dependencies and copy Prisma client from builder
 RUN npm ci --omit=dev --ignore-scripts && npm rebuild bcrypt --build-from-source
-COPY --from=builder --chown=nestjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder --chown=ci-deploy:users /app/node_modules/.prisma ./node_modules/.prisma
 
 # Copy built application
-COPY --from=builder --chown=nestjs:nodejs /app/dist ./dist
+COPY --from=builder --chown=ci-deploy:users /app/dist ./dist
 
 # Set environment variables
 ENV NODE_ENV=production
 ENV PORT=3500
 
 # Create necessary directories with proper permissions
-RUN mkdir -p logs docs && chown -R nestjs:nodejs logs docs
+RUN mkdir -p logs docs && chown -R ci-deploy:users logs docs
 
 # Switch to non-root user
-USER nestjs
+USER ci-deploy
 
 # Expose port
 EXPOSE $PORT
