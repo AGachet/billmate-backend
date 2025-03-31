@@ -26,6 +26,7 @@ import type { SignInDto } from '@modules/auth/dto/requests/signin.dto'
 import type { SignOutDto } from '@modules/auth/dto/requests/signout.dto'
 import type { SignUpDto } from '@modules/auth/dto/requests/signup.dto'
 
+import type { GuestResponseDto } from '@modules/auth/dto/responses/guest.response.dto'
 import type { MeResponseDto } from '@modules/auth/dto/responses/me.response.dto'
 import type { RequestPasswordResetResponseDto } from '@modules/auth/dto/responses/request-password-reset.response.dto'
 import type { ResetPasswordResponseDto } from '@modules/auth/dto/responses/reset-password.response.dto'
@@ -376,6 +377,58 @@ export class AuthService {
       modules,
       permissions,
       createdAt: user.createdAt
+    }
+  }
+
+  async getGuest(): Promise<GuestResponseDto> {
+    this.logger.debug('Getting guest user information', 'getGuest')
+
+    // Get guest role with modules and permissions
+    const guestRole = await this.prisma.role.findFirst({
+      where: { name: 'guest', isActive: true },
+      include: {
+        modulesLinked: {
+          where: {
+            module: {
+              isActive: true
+            }
+          },
+          include: {
+            module: true
+          }
+        },
+        permissionsLinked: {
+          include: {
+            permission: {
+              include: {
+                module: true
+              }
+            }
+          }
+        }
+      }
+    })
+
+    // If no guest role found, return empty arrays
+    if (!guestRole) {
+      this.logger.warn('Guest role not found, returning empty arrays', 'getGuest')
+      return {
+        roles: ['guest'],
+        modules: [],
+        permissions: []
+      }
+    }
+
+    // Extract modules from active roles (modules attached and active)
+    const modules = guestRole.modulesLinked.map((moduleLink) => moduleLink.module.name)
+
+    // Extract permissions from active roles (permissions attached to active roles and modules)
+    const permissions = guestRole.permissionsLinked.filter((permissionLink) => permissionLink.permission.module?.isActive).map((permissionLink) => permissionLink.permission.name)
+
+    return {
+      roles: ['guest'],
+      modules,
+      permissions
     }
   }
 
