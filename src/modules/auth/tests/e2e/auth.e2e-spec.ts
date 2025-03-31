@@ -224,5 +224,26 @@ describe('Auth Module (e2e)', () => {
       expect(response.body.email).toBe(testUser.email)
       expect(response.body.roles).toEqual(['user'])
     })
+
+    it('Should retrieve guest information', async () => {
+      const response = await agent.get('/api/auth/guest').expect(200)
+
+      expect(response.body).toHaveProperty('roles')
+      expect(response.body).toHaveProperty('modules')
+      expect(response.body).toHaveProperty('permissions')
+
+      expect(response.body.roles).toEqual(['guest'])
+      expect(response.body.modules).toContain('USER_ACCOUNT_CREATION')
+      expect(response.body.modules).toContain('USER_ACCOUNT_PASSWORD_RECOVERY')
+      expect(response.body.permissions).toContain('USER_ACCOUNT_CREATE_OWN')
+    })
+
+    it('Should not require authentication for guest endpoint', async () => {
+      const response = await request(app.getHttpServer()).get('/api/auth/guest').expect(200)
+
+      expect(response.body).toHaveProperty('roles')
+      expect(response.body).toHaveProperty('modules')
+      expect(response.body).toHaveProperty('permissions')
+    })
   })
 })

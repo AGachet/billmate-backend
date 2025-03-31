@@ -133,6 +133,9 @@ describe('AuthService', () => {
               deleteMany: jest.fn(),
               findFirst: jest.fn(),
               delete: jest.fn()
+            },
+            role: {
+              findFirst: jest.fn()
             }
           }
         },
@@ -431,6 +434,115 @@ describe('AuthService', () => {
 
       await expect(service.getMe('non-existent-id')).rejects.toThrow(BadRequestException)
       expect(logger.warn).toHaveBeenCalledWith('User not found: non-existent-id', 'getMe')
+    })
+  })
+
+  describe('getGuest', () => {
+    const mockGuestRole = {
+      name: 'guest',
+      isActive: true,
+      modulesLinked: [
+        {
+          module: {
+            name: 'USER_ACCOUNT_CREATION',
+            isActive: true
+          }
+        }
+      ],
+      permissionsLinked: [
+        {
+          permission: {
+            name: 'USER_ACCOUNT_CREATE_OWN',
+            module: {
+              isActive: true
+            }
+          }
+        }
+      ]
+    }
+
+    it('should return guest information successfully', async () => {
+      ;(prismaService.role.findFirst as jest.Mock).mockResolvedValue(mockGuestRole)
+
+      const result = await service.getGuest()
+
+      expect(result).toEqual({
+        roles: ['guest'],
+        modules: ['USER_ACCOUNT_CREATION'],
+        permissions: ['USER_ACCOUNT_CREATE_OWN']
+      })
+      expect(logger.debug).toHaveBeenCalledWith('Getting guest user information', 'getGuest')
+    })
+
+    it('should return empty arrays if guest role not found', async () => {
+      ;(prismaService.role.findFirst as jest.Mock).mockResolvedValue(null)
+
+      const result = await service.getGuest()
+
+      expect(result).toEqual({
+        roles: ['guest'],
+        modules: [],
+        permissions: []
+      })
+      expect(logger.warn).toHaveBeenCalledWith('Guest role not found, returning empty arrays', 'getGuest')
+    })
+
+    it('should filter out inactive modules', async () => {
+      const mockGuestRoleWithInactiveModule = {
+        ...mockGuestRole,
+        modulesLinked: [
+          {
+            module: {
+              name: 'USER_ACCOUNT_CREATION',
+              isActive: true
+            }
+          },
+          {
+            module: {
+              name: 'INACTIVE_MODULE',
+              isActive: false
+            }
+          }
+        ]
+      }
+
+      ;(prismaService.role.findFirst as jest.Mock).mockResolvedValue(mockGuestRoleWithInactiveModule)
+
+      const result = await service.getGuest()
+
+      expect(result.modules).toEqual(['USER_ACCOUNT_CREATION'])
+      expect(result.modules).not.toContain('INACTIVE_MODULE')
+    })
+
+    it('should filter out permissions from inactive modules', async () => {
+      const mockGuestRoleWithInactiveModulePermission = {
+        ...mockGuestRole,
+        permissionsLinked: [
+          {
+            permission: {
+              name: 'USER_ACCOUNT_CREATE_OWN',
+              module: {
+                isActive: true
+              }
+            }
+          },
+          {
+            permission: {
+              name: 'INACTIVE_MODULE_PERMISSION',
+              module: {
+                isActive: false
+              }
+            }
+          }
+        ]
+      }
+
+      ;(prismaService.role.findFirst as jest.Mock).mockResolvedValue(mockGuestRoleWithInactiveModulePermission)
+
+      const result = await service.getGuest()
+
+      expect(result.permissions).toEqual(['USER_ACCOUNT_CREATE_OWN'])
+      expect(result.permissions).not.toContain('INACTIVE_MODULE_PERMISSION')
     })
   })
 
