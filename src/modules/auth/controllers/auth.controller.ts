@@ -1,33 +1,34 @@
 /**
  * Resources
  */
-import { Controller, Post, Body, Res, Get, UseGuards, Req, HttpCode, HttpStatus } from '@nestjs/common'
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiOkResponse, ApiUnauthorizedResponse, ApiBadRequestResponse } from '@nestjs/swagger'
+import { Body, Controller, Get, HttpCode, HttpStatus, Post, Req, Res, UseGuards } from '@nestjs/common'
+import { ApiBadRequestResponse, ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags, ApiUnauthorizedResponse } from '@nestjs/swagger'
 
 /**
  * Dependencies
  */
-import { AuthService } from '@modules/auth/services/auth.service'
 import { JwtAuthGuard } from '@modules/auth/guards/jwt-auth.guard'
+import { AuthService } from '@modules/auth/services/auth.service'
 
 import { RequestPasswordResetDto } from '@modules/auth/dto/requests/request-password-reset.dto'
 import { ResetPasswordDto } from '@modules/auth/dto/requests/reset-password.dto'
-import { SignOutDto } from '@modules/auth/dto/requests/signout.dto'
 import { SignInDto } from '@modules/auth/dto/requests/signin.dto'
+import { SignOutDto } from '@modules/auth/dto/requests/signout.dto'
 import { SignUpDto } from '@modules/auth/dto/requests/signup.dto'
 
+import { GuestResponseDto } from '@modules/auth/dto/responses/guest.response.dto'
+import { MeResponseDto } from '@modules/auth/dto/responses/me.response.dto'
 import { RequestPasswordResetResponseDto } from '@modules/auth/dto/responses/request-password-reset.response.dto'
 import { ResetPasswordResponseDto } from '@modules/auth/dto/responses/reset-password.response.dto'
-import { SignOutResponseDto } from '@modules/auth/dto/responses/signout.response.dto'
 import { SignInResponseDto } from '@modules/auth/dto/responses/signin.response.dto'
+import { SignOutResponseDto } from '@modules/auth/dto/responses/signout.response.dto'
 import { SignUpResponseDto } from '@modules/auth/dto/responses/signup.response.dto'
-import { MeResponseDto } from '@modules/auth/dto/responses/me.response.dto'
 
 /**
  * Type
  */
-import type { Response, Request } from 'express'
 import type { User } from '@prisma/client'
+import type { Request, Response } from 'express'
 
 // Extend Request type to include user property
 interface AuthenticatedRequest extends Request {
@@ -110,5 +111,13 @@ export class AuthController {
   @ApiUnauthorizedResponse({ description: 'Unauthorized - Invalid or missing token.' })
   async getMe(@Req() request: AuthenticatedRequest): Promise<MeResponseDto> {
     return this.authService.getMe(request.user.id)
+  }
+
+  @Get('guest')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Get guest user', description: 'Retrieve the basic information for guest users.' })
+  @ApiOkResponse({ type: GuestResponseDto })
+  async getGuest(): Promise<GuestResponseDto> {
+    return this.authService.getGuest()
   }
 }
