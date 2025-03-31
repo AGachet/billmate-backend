@@ -420,7 +420,7 @@ export class AuthService {
     }
 
     // Extract modules from active roles (modules attached and active)
-    const modules = guestRole.modulesLinked.map((moduleLink) => moduleLink.module.name)
+    const modules = guestRole.modulesLinked.filter((moduleLink) => moduleLink.module.isActive).map((moduleLink) => moduleLink.module.name)
 
     // Extract permissions from active roles (permissions attached to active roles and modules)
     const permissions = guestRole.permissionsLinked.filter((permissionLink) => permissionLink.permission.module?.isActive).map((permissionLink) => permissionLink.permission.name)
