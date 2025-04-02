@@ -252,7 +252,15 @@ propose_version_update() {
 
 update_version() {
   if [ "$update_decision" != "y" ]; then
-    echo "$(tput setaf 4)ℹ$(tput sgr0) Continuing with existing version v$version..."
+    if [ "$remote_tag_exists" = "true" ]; then
+      echo "$(tput setaf 2)✅ User confirmation to overwrite tag data for tag v$version$(tput sgr0)"
+      echo ""
+      echo "$(tput setaf 2)✅ Tag management complete$(tput sgr0)"
+      wait_for_input
+      exit 0  # Exit immediately after user confirms to keep version
+    else
+      echo "$(tput setaf 4)ℹ$(tput sgr0) Continuing with existing version v$version..."
+    fi
     return 0
   fi
 
@@ -327,6 +335,7 @@ confirm_update() {
   echo ""
   echo "$(tput setaf 2)✅ Tag management complete$(tput sgr0)"
   wait_for_input
+  exit 0  # Exit script after tag management to avoid additional sections
 }
 
 # 4. Error handling
@@ -346,8 +355,12 @@ main() {
   check_state_version "before_update" # Step 2: Check current version state
   propose_version_update # Step 3: Propose version update
   update_version # Step 4: Update version if requested
-  check_state_version "after_update" # Step 5: Check new version state
-  confirm_update # Step 6: Confirm update and tag management
+
+  # Only continue if version was updated or no remote tag exists
+  if [ "$update_decision" = "y" ] || [ "$remote_tag_exists" != "true" ]; then
+    check_state_version "after_update" # Step 5: Check new version state
+    confirm_update # Step 6: Confirm update and tag management
+  fi
 }
 
 # 7. Execution
