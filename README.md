@@ -165,7 +165,7 @@ npm run db:update:prod <migration_name>
 
 #### ⚠️ Warning:
 
-This command will prompt for **confirmation** before applying migrations in **production**
+This command will prompt for **confirmation** before applying migrations in **production**.
 
 ---
 
