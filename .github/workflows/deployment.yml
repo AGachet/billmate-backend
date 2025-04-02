@@ -111,17 +111,27 @@ jobs:
           fi
 
       - name: Set Git user
-        if: steps.check-is-version-bump.outputs.is_version_bump == 'true' && steps.check-tag.outputs.tag_exists == 'false'
+        if: steps.check-is-version-bump.outputs.is_version_bump == 'true'
         run: |
           git config --global user.email "actions@github.com"
           git config --global user.name "GitHub Actions"
 
-      - name: Create and push tag
+      - name: Create tag if it doesn't exist
         if: steps.check-is-version-bump.outputs.is_version_bump == 'true' && steps.check-tag.outputs.tag_exists == 'false'
         run: |
           git tag -a "v${{ steps.package-version.outputs.version }}" -m "Release version ${{ steps.package-version.outputs.version }}"
-          git push origin "v${{ steps.package-version.outputs.version }}"
-          echo "Created and pushed tag v${{ steps.package-version.outputs.version }}"
+          echo "Created tag v${{ steps.package-version.outputs.version }}"
+
+      - name: Push current master to tag
+        if: steps.check-is-version-bump.outputs.is_version_bump == 'true'
+        run: |
+          if [ "${{ steps.check-tag.outputs.tag_exists }}" == "true" ]; then
+            git push origin HEAD:refs/tags/v${{ steps.package-version.outputs.version }} -f
+            echo "Updated existing tag v${{ steps.package-version.outputs.version }} with current master"
+          else
+            git push origin "v${{ steps.package-version.outputs.version }}"
+            echo "Pushed new tag v${{ steps.package-version.outputs.version }}"
+          fi
 
   docker-push:
     name: Push Docker image to GHCR
