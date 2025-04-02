@@ -1,0 +1,180 @@
+# Get the current branch name
+current_branch=$(git symbolic-ref --short HEAD)
+echo "Preparing to push branch: $current_branch"
+
+# Get remote and URL information
+remote="$1"
+url="$2"
+
+# Check if we're pushing a RC branch
+if [[ "$current_branch" =~ ^rc- ]]; then
+  echo "Release candidate branch detected: $current_branch"
+
+  # Get the package version
+  version=$(node -p "require('./package.json').version")
+
+  # Get repository URL
+  repo_url=$(node -p "require('./package.json').repository.url" | sed 's/https:\/\/github.com\///' | sed 's/\.git$//')
+
+  # Check if this version tag already exists locally
+  if git rev-parse "v$version" >/dev/null 2>&1; then
+    echo "Local tag v$version already exists."
+    local_tag_exists=true
+  else
+    local_tag_exists=false
+  fi
+
+  # Check if this version tag already exists on remote
+  remote_tag_exists=false
+  if git ls-remote --tags origin "refs/tags/v$version" 2>/dev/null | grep -q "refs/tags/v$version"; then
+    echo "Remote tag v$version already exists in the repository."
+    remote_tag_exists=true
+  fi
+
+  echo "Current version in package.json: v$version"
+
+  if [ "$remote_tag_exists" = true ]; then
+    echo "The tag v$version already exists on the remote repository."
+
+    # Ask if user wants to create a new tag version
+    echo ""
+    read -p "Do you want to create a new version tag? (y/n) " create_new_tag
+    if [ "$create_new_tag" != "y" ]; then
+      echo "Continuing with existing version..."
+    else
+      # Get the package version before upgrading
+      old_version=$version
+
+      # Interactive version selection for new tag
+      echo ""
+      echo "Select version update type:"
+      echo "1) patch: Bug fixes and minor changes [e.g. 1.0.0 -> 1.0.1]"
+      echo "2) minor: New features backward compatible [e.g. 1.0.0 -> 1.1.0]"
+      echo "3) major: Breaking changes [e.g. 1.0.0 -> 2.0.0]"
+      read -p "Enter choice (1-3): " version_type
+
+      case $version_type in
+        1) bump_type="patch" ;;
+        2) bump_type="minor" ;;
+        3) bump_type="major" ;;
+        *) echo "Invalid choice. Continuing with existing version."; bump_type="" ;;
+      esac
+
+      if [ -n "$bump_type" ]; then
+        # Pre-release options
+        echo ""
+        echo "Select pre-release status:"
+        echo "0) none: Not a pre-release version (DEFAULT)"
+        echo "1) alpha: Early internal testing"
+        echo "2) beta: Public testing but still unstable"
+        echo "3) rc: Release candidate, ready to be published publicly"
+        read -p "Enter choice (0-3) [default: 0]: " prerelease_type
+
+        # Default to 0 if no input
+        prerelease_type=${prerelease_type:-0}
+
+        case $prerelease_type in
+          0) prerelease="" ;;
+          1) prerelease="alpha" ;;
+          2) prerelease="beta" ;;
+          3) prerelease="rc" ;;
+          *) echo "Invalid choice. Using no pre-release tag."; prerelease="" ;;
+        esac
+
+        # Update package.json with new version
+        if [ -z "$prerelease" ]; then
+          npm --no-git-tag-version version $bump_type
+        else
+          # Check if current version already has a prerelease tag
+          if [[ $version == *"-"* ]]; then
+            npm --no-git-tag-version version pre$bump_type --preid=$prerelease
+          else
+            npm --no-git-tag-version version $bump_type --preid=$prerelease
+            npm --no-git-tag-version version pre$prerelease
+          fi
+        fi
+
+        # Get new version
+        version=$(node -p "require('./package.json').version")
+
+        # Add package.json to staging
+        git add package.json
+        if [ -f "package-lock.json" ]; then
+          git add package-lock.json
+        fi
+
+        # Commit the updated package.json
+        git commit -m "chore: bump version to v$version"
+        echo "Updated version to v$version"
+      fi
+    fi
+  else
+    echo "No tag v$version exists on the remote repository."
+  fi
+
+  # Check if we need to create a tag
+  if ! git rev-parse "v$version" >/dev/null 2>&1; then
+    # Create tag
+    echo "Creating tag v$version based on package.json version"
+    git tag -a "v$version" -m "Release version $version"
+    echo "Tag v$version created and will be pushed with your changes"
+  fi
+
+  # Confirm with user about pushing tags
+  echo ""
+  read -p "Do you want to push tags along with your changes? (y/n) " push_tags
+  if [ "$push_tags" = "y" ]; then
+    echo "Tags will be pushed along with your changes"
+    # We're not actually executing the push here, just confirming that the
+    # current git push command will include tags
+    git config --local push.followTags true
+  else
+    echo "Tags will not be pushed automatically. You can push them later with: git push origin v$version"
+    git config --local push.followTags false
+  fi
+
+else
+  # Not a RC branch
+  echo "This is not a release candidate branch."
+  echo "NOTE: To use automatic version and tag management, name your branches with 'rc-' prefix"
+  echo "      (e.g., 'rc-feature', 'rc-bugfix', etc.)"
+
+  # Optional: Check for WIP commits before pushing
+  if git log @{u}..HEAD --pretty=format:"%s" | grep -q "WIP"; then
+    echo "WARNING: Your branch contains WIP commits."
+    read -p "Continue pushing with WIP commits? (y/n) " continue_wip
+    if [ "$continue_wip" != "y" ]; then
+      echo "Push aborted."
+      exit 1
+    fi
+  fi
+
+  # If pushing to master/main, check if version has a tag
+  if [ "$current_branch" = "master" ] || [ "$current_branch" = "main" ]; then
+    version=$(node -p "require('./package.json').version")
+    echo "Current package.json version: v$version"
+
+    if ! git rev-parse "v$version" >/dev/null 2>&1; then
+      echo "WARNING: You are pushing to $current_branch but no tag exists for version v$version."
+      echo "This might cause issues with automated deployment workflows."
+      read -p "Do you want to create a tag v$version before pushing? (y/n) " create_tag
+      if [ "$create_tag" = "y" ]; then
+        git tag -a "v$version" -m "Release version $version"
+        echo "Created tag v$version. The tag will be pushed together with your changes."
+        git config --local push.followTags true
+      else
+        read -p "Continue push without creating a tag? (y/n) " continue_push
+        if [ "$continue_push" != "y" ]; then
+          echo "Push aborted."
+          exit 1
+        fi
+      fi
+    else
+      echo "Tag v$version exists for current version in package.json."
+    fi
+  fi
+fi
+
+# All checks passed
+echo "All pre-push checks passed. Proceeding with push..."
+exit 0
