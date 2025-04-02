@@ -7,7 +7,7 @@
 
 # 1. Define configuration constants
 readonly RC_BRANCH_PREFIX="rc-"
-readonly VERSION_PATTERN="^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+(\.[0-9]+)?)?$"
+readonly VERSION_PATTERN="^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?$"
 
 # 2. Global variables declaration
 current_branch=""
@@ -201,7 +201,7 @@ propose_version_update() {
     get_user_input "Enter custom version (without the 'v' prefix, e.g., 0.0.1)" custom_version
 
     if [[ ! "$custom_version" =~ $VERSION_PATTERN ]]; then
-      echo "$(tput setaf 1)❌ Invalid version format. Must be in format like 1.2.3 or 1.2.3-alpha.1$(tput sgr0)"
+      echo "$(tput setaf 1)❌ Invalid version format. Must be in format like 1.2.3 or 1.2.3-alpha$(tput sgr0)"
       update_decision="no"
       return 1
     fi
@@ -278,7 +278,10 @@ update_version() {
   else
     # Check if current version already has a prerelease tag
     if [[ $version == *"-"* ]]; then
-      npm --no-git-tag-version version "pre$bump_type" --preid="$prerelease"
+      # Increment version without adding a number to the prerelease tag
+      npm --no-git-tag-version version "$bump_type"
+      current_version=$(node -p "require('./package.json').version")
+      npm --no-git-tag-version version "${current_version}-${prerelease}"
     else
       # D'abord incrémenter la version selon le type (major, minor, patch)
       npm --no-git-tag-version version "$bump_type"
