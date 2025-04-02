@@ -86,9 +86,16 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
-            type=raw,value=${{ github.event.inputs.version || steps.package-version.outputs.version }}
+            type=raw,value=${{ steps.package-version.outputs.version }}
             type=raw,value=latest
-            type=sha,format=long
+            type=sha,format=short
+
+      - name: Show tags before push
+        run: |
+          echo "Tags that will be applied:"
+          echo "${{ steps.meta.outputs.tags }}"
+          echo "Current images and their tags:"
+          docker images ghcr.io/${{ github.repository }} --format "{{.ID}} {{.Repository}}:{{.Tag}}"
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
@@ -100,12 +107,24 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Show tags after push
+        run: |
+          echo "Images and their tags after push:"
+          docker images ghcr.io/${{ github.repository }} --format "{{.ID}} {{.Tag}}"
+
   deploy-to-nas:
     name: Deploy to NAS
     needs: [docker-push]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Get package version
+        id: package-version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "Version from package.json: $VERSION"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Setup SSH key
         run: |
@@ -142,6 +161,28 @@ jobs:
             fi
           }
 
+          # Set version variables once at the beginning
+          REPO="$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
+          VERSION="${{ steps.package-version.outputs.version }}"
+          SHA_SHORT=$(echo "${{ github.sha }}" | cut -c1-7)
+          echo "Using repository: ${REPO}, version: ${VERSION}, SHA: ${SHA_SHORT}"
+
+          # Verify version is not empty
+          if [ -z "$VERSION" ]; then
+            echo "ERROR: Version is empty! Using default version 0.0.0"
+            VERSION="0.0.0"
+          fi
+
+          # Debug package.json content
+          echo "Package.json content:"
+          cat package.json | grep version
+
+          # Update local docker-compose.yml to use version tag
+          echo "Updating local docker-compose.yml..."
+          sed -i.bak "s|image:.*|image: ghcr.io/${REPO}:${VERSION}|" docker-compose.yml
+          echo "Updated docker-compose.yml content:"
+          cat docker-compose.yml
+
           # Create network if it doesn't exist
           echo "Creating network if it doesn't exist..."
           ssh cinas-ext "/usr/local/bin/docker network inspect billmate-network >/dev/null 2>&1 || /usr/local/bin/docker network create billmate-network"
@@ -157,18 +198,17 @@ jobs:
           cat docker-compose.yml | ssh cinas-ext "cat > ${{ secrets.NAS_BACKEND_PATH }}/docker-compose.yml"
           check_ssh_status "File copy" "cat docker-compose.yml"
 
-          # Update image in docker-compose.yml
-          echo "Updating image in docker-compose.yml..."
-          REPO=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
-          ssh cinas-ext "sed -i 's|image: .*|image: ghcr.io/$REPO:latest|' ${{ secrets.NAS_BACKEND_PATH }}/docker-compose.yml"
-          check_ssh_status "Image update" "sed image"
+          # Verify docker-compose.yml content on NAS
+          echo "Verifying docker-compose.yml content on NAS..."
+          ssh cinas-ext "cat ${{ secrets.NAS_BACKEND_PATH }}/docker-compose.yml"
+          check_ssh_status "File verification" "cat docker-compose.yml"
 
           # Remove port exposure in docker-compose.yml
           echo "Removing port exposure..."
           ssh cinas-ext "sed -i '/ports:/,/3500/d' ${{ secrets.NAS_BACKEND_PATH }}/docker-compose.yml"
           check_ssh_status "Port removal" "sed ports"
 
-          # Create encrypted .env file from secrets
+          # Create .env file from secrets
           echo "Creating .env file..."
           ssh cinas-ext "cat <<EOF > ${{ secrets.NAS_BACKEND_PATH }}/.env
           # Server Configuration
@@ -198,11 +238,6 @@ jobs:
           EOF"
           check_ssh_status "Env file creation" "cat > .env"
 
-          # Set proper permissions for .env file
-          echo "Setting .env file permissions..."
-          ssh cinas-ext "chmod 600 ${{ secrets.NAS_BACKEND_PATH }}/.env"
-          check_ssh_status "Permission setting" "chmod .env"
-
           # Check if deployment is possible
           echo "Checking if deployment is possible..."
           if ssh cinas-ext "cd ${{ secrets.NAS_BACKEND_PATH }} && /usr/local/bin/docker-compose ps | grep -q 'backend'"; then
@@ -211,15 +246,53 @@ jobs:
             echo "No backend is currently running. Proceeding with fresh deployment..."
           fi
 
-          # Clean up old images and containers
-          echo "Cleaning up old containers..."
-          ssh cinas-ext "cd ${{ secrets.NAS_BACKEND_PATH }} && /usr/local/bin/docker-compose down"
-          check_ssh_status "Container cleanup" "docker-compose down"
+          # Set up environment variables
+          echo "Setting up environment variables on NAS..."
+          ssh cinas-ext "cd ${{ secrets.NAS_BACKEND_PATH }} && export REPO=\"${REPO}\" && export VERSION=\"${VERSION}\""
+          check_ssh_status "Environment setup" "Setting environment variables"
 
-          # Pull and deploy the container
-          echo "Pulling and deploying new container..."
-          ssh cinas-ext "cd ${{ secrets.NAS_BACKEND_PATH }} && /usr/local/bin/docker-compose pull && /usr/local/bin/docker-compose up -d"
-          check_ssh_status "Container deployment" "docker-compose up"
+          # Stop the current container
+          echo "Stopping current container..."
+          ssh cinas-ext "cd ${{ secrets.NAS_BACKEND_PATH }} && /usr/local/bin/docker-compose down"
+          check_ssh_status "Container shutdown" "docker-compose down"
+
+          # Check docker-compose.yml for validity
+          echo "Checking docker-compose.yml for validity..."
+          ssh cinas-ext "cd ${{ secrets.NAS_BACKEND_PATH }} && cat docker-compose.yml && /usr/local/bin/docker-compose config"
+          check_ssh_status "Docker compose validation" "docker-compose config"
+
+          # Before starting container, ensure we have the latest image version
+          echo "Ensuring we have the latest image version..."
+          ssh cinas-ext "cd ${{ secrets.NAS_BACKEND_PATH }} && /usr/local/bin/docker pull ghcr.io/${REPO}:${VERSION}"
+          check_ssh_status "Image pull" "docker pull"
+
+          # Start the new container
+          echo "Starting new container..."
+          ssh cinas-ext "cd ${{ secrets.NAS_BACKEND_PATH }} && /usr/local/bin/docker-compose up -d"
+          check_ssh_status "Container startup" "docker-compose up -d"
+
+          # Clean up containers and unused images
+          echo "Cleaning up unused containers and images..."
+          ssh cinas-ext "cd ${{ secrets.NAS_BACKEND_PATH }} && \
+            echo 'Pruning unused containers...' && \
+            /usr/local/bin/docker container prune -f && \
+            echo 'Cleaning up images from repository ${REPO} except the current version ${VERSION}...' && \
+            CURRENT_IMAGE_ID=\$(/usr/local/bin/docker images ghcr.io/${REPO}:${VERSION} -q) && \
+            if [ ! -z \"\$CURRENT_IMAGE_ID\" ]; then \
+              echo \"Keeping current image ID: \$CURRENT_IMAGE_ID\" && \
+              ALL_REPO_IMAGES=\$(/usr/local/bin/docker images ghcr.io/${REPO} -q) && \
+              for IMG_ID in \$ALL_REPO_IMAGES; do \
+                if [ \"\$IMG_ID\" != \"\$CURRENT_IMAGE_ID\" ]; then \
+                  echo \"Removing old image: \$IMG_ID\" && \
+                  /usr/local/bin/docker rmi -f \$IMG_ID || true; \
+                fi; \
+              done && \
+              echo 'Pruning any remaining dangling images...' && \
+              /usr/local/bin/docker image prune -f; \
+            else \
+              echo \"Warning: Current image ID not found. Skipping cleanup.\"; \
+            fi"
+          check_ssh_status "Image cleanup" "docker image cleanup"
 
           # Wait for container to be healthy
           echo "Waiting for container to be healthy..."
