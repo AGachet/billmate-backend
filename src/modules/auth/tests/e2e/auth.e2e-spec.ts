@@ -69,18 +69,6 @@ describe('Auth Module (e2e)', () => {
 
     // Create a supertest agent that will maintain cookies between requests
     agent = request.agent(app.getHttpServer())
-
-    // Clean up database before tests
-    const user = await prismaService.user.findUnique({
-      where: { email: testUser.email }
-    })
-
-    if (user) {
-      // Delete user (all related records will be deleted automatically)
-      await prismaService.user.delete({
-        where: { id: user.id }
-      })
-    }
   })
 
   afterAll(async () => {
