@@ -75,40 +75,31 @@ jobs:
           echo "Version from package.json: $VERSION"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Check if source branch starts with rc-
-        id: check-branch
+      - name: Check for version bump in commit message
+        id: check-is-version-bump
         run: |
-          # Find the source branch that was merged into master
           if [ "${{ github.event_name }}" = "push" ]; then
-            # Get commit message for the merge commit
+            # Get last commit message
             COMMIT_MSG=$(git log -1 --pretty=%B)
-            echo "Commit message: $COMMIT_MSG"
+            echo "Last commit message: $COMMIT_MSG"
 
-            # Look for 'Merge pull request #X from OWNER/rc-...' or 'Merge branch 'rc-...'
-            if [[ "$COMMIT_MSG" =~ Merge\ pull\ request\ #[0-9]+\ from\ [^/]+/(rc-[^ ]+) ]] || [[ "$COMMIT_MSG" =~ Merge\ branch\ \'(rc-[^\']+)\' ]]; then
-              SRC_BRANCH="${BASH_REMATCH[1]}"
-              echo "Source branch identified: $SRC_BRANCH"
-              echo "is_rc_branch=true" >> $GITHUB_OUTPUT
+            # Check for version bump commit
+            if [[ "$COMMIT_MSG" =~ chore:\ bump\ version\ to ]]; then
+              echo "✅ Version bump commit detected: $COMMIT_MSG"
+              echo "is_version_bump=true" >> $GITHUB_OUTPUT
             else
-              echo "This does not appear to be a merge from an rc- branch"
-              echo "is_rc_branch=false" >> $GITHUB_OUTPUT
+              echo "No version bump detected in commit message"
+              echo "is_version_bump=false" >> $GITHUB_OUTPUT
             fi
           else
-            # For workflow_dispatch and repository_dispatch, use the current branch
-            BRANCH_NAME="${GITHUB_REF#refs/heads/}"
-            echo "Current branch: $BRANCH_NAME"
-            if [[ "$BRANCH_NAME" =~ ^rc- ]]; then
-              echo "Branch starts with rc-, will proceed with tag creation"
-              echo "is_rc_branch=true" >> $GITHUB_OUTPUT
-            else
-              echo "Branch does not start with rc-, skipping tag creation"
-              echo "is_rc_branch=false" >> $GITHUB_OUTPUT
-            fi
+            # For workflow_dispatch and repository_dispatch
+            echo "Not a push event, skipping tag creation"
+            echo "is_version_bump=false" >> $GITHUB_OUTPUT
           fi
 
       - name: Check if version tag exists
         id: check-tag
-        if: steps.check-branch.outputs.is_rc_branch == 'true'
+        if: steps.check-is-version-bump.outputs.is_version_bump == 'true'
         run: |
           TAG_EXISTS=$(git tag -l "v${{ steps.package-version.outputs.version }}")
           if [ -z "$TAG_EXISTS" ]; then
@@ -120,13 +111,13 @@ jobs:
           fi
 
       - name: Set Git user
-        if: steps.check-branch.outputs.is_rc_branch == 'true' && steps.check-tag.outputs.tag_exists == 'false'
+        if: steps.check-is-version-bump.outputs.is_version_bump == 'true' && steps.check-tag.outputs.tag_exists == 'false'
         run: |
           git config --global user.email "actions@github.com"
           git config --global user.name "GitHub Actions"
 
       - name: Create and push tag
-        if: steps.check-branch.outputs.is_rc_branch == 'true' && steps.check-tag.outputs.tag_exists == 'false'
+        if: steps.check-is-version-bump.outputs.is_version_bump == 'true' && steps.check-tag.outputs.tag_exists == 'false'
         run: |
           git tag -a "v${{ steps.package-version.outputs.version }}" -m "Release version ${{ steps.package-version.outputs.version }}"
           git push origin "v${{ steps.package-version.outputs.version }}"
