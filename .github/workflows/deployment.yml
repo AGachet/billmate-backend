@@ -75,17 +75,35 @@ jobs:
           echo "Version from package.json: $VERSION"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Check if current branch starts with rc-
+      - name: Check if source branch starts with rc-
         id: check-branch
         run: |
-          BRANCH_NAME="${GITHUB_REF#refs/heads/}"
-          echo "Current branch: $BRANCH_NAME"
-          if [[ "$BRANCH_NAME" =~ ^rc- ]]; then
-            echo "Branch starts with rc-, will proceed with tag creation"
-            echo "is_rc_branch=true" >> $GITHUB_OUTPUT
+          # Find the source branch that was merged into master
+          if [ "${{ github.event_name }}" = "push" ]; then
+            # Get commit message for the merge commit
+            COMMIT_MSG=$(git log -1 --pretty=%B)
+            echo "Commit message: $COMMIT_MSG"
+
+            # Look for 'Merge pull request #X from OWNER/rc-...' or 'Merge branch 'rc-...'
+            if [[ "$COMMIT_MSG" =~ Merge\ pull\ request\ #[0-9]+\ from\ [^/]+/(rc-[^ ]+) ]] || [[ "$COMMIT_MSG" =~ Merge\ branch\ \'(rc-[^\']+)\' ]]; then
+              SRC_BRANCH="${BASH_REMATCH[1]}"
+              echo "Source branch identified: $SRC_BRANCH"
+              echo "is_rc_branch=true" >> $GITHUB_OUTPUT
+            else
+              echo "This does not appear to be a merge from an rc- branch"
+              echo "is_rc_branch=false" >> $GITHUB_OUTPUT
+            fi
           else
-            echo "Branch does not start with rc-, skipping tag creation"
-            echo "is_rc_branch=false" >> $GITHUB_OUTPUT
+            # For workflow_dispatch and repository_dispatch, use the current branch
+            BRANCH_NAME="${GITHUB_REF#refs/heads/}"
+            echo "Current branch: $BRANCH_NAME"
+            if [[ "$BRANCH_NAME" =~ ^rc- ]]; then
+              echo "Branch starts with rc-, will proceed with tag creation"
+              echo "is_rc_branch=true" >> $GITHUB_OUTPUT
+            else
+              echo "Branch does not start with rc-, skipping tag creation"
+              echo "is_rc_branch=false" >> $GITHUB_OUTPUT
+            fi
           fi
 
       - name: Check if version tag exists
@@ -124,10 +142,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Get package version from previous job
+      # Always get package version directly from package.json to ensure consistency
+      - name: Get package version directly
         id: package-version
         run: |
-          echo "version=${{ needs.create-version-tag.outputs.version }}" >> $GITHUB_OUTPUT
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          echo "Version from package.json: $PKG_VERSION"
+          echo "version=$PKG_VERSION" >> $GITHUB_OUTPUT
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -178,12 +199,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Get package version
+      # Always get package version directly from package.json to ensure consistency
+      - name: Get package version directly
         id: package-version
         run: |
-          VERSION=$(node -p "require('./package.json').version")
-          echo "Version from package.json: $VERSION"
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          echo "Version from package.json: $PKG_VERSION"
+          echo "version=$PKG_VERSION" >> $GITHUB_OUTPUT
 
       - name: Setup SSH key
         run: |
@@ -222,14 +244,16 @@ jobs:
 
           # Set version variables once at the beginning
           REPO="$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
+          # Always use package.json version directly to ensure consistency
           VERSION="${{ steps.package-version.outputs.version }}"
           SHA_SHORT=$(echo "${{ github.sha }}" | cut -c1-7)
           echo "Using repository: ${REPO}, version: ${VERSION}, SHA: ${SHA_SHORT}"
 
-          # Verify version is not empty
+          # Fail if version is empty (critical error)
           if [ -z "$VERSION" ]; then
-            echo "ERROR: Version is empty! Using default version 0.0.0"
-            VERSION="0.0.0"
+            echo "ERROR: Version is empty! This is a critical error."
+            echo "Package.json might be invalid or not accessible."
+            exit 1
           fi
 
           # Debug package.json content
