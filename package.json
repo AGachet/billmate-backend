@@ -1,6 +1,6 @@
 {
   "name": "billmate-backend",
-  "version": "0.1.0-alpha",
+  "version": "0.1.1-alpha",
   "description": "BillMate: Wealth begins with good management. An open-source frontend for managing clients, invoices, and financial tasks.",
   "license": "MIT",
   "repository": {
