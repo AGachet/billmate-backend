@@ -276,18 +276,38 @@ update_version() {
   elif [ -z "$prerelease" ]; then
     npm --no-git-tag-version version "$bump_type"
   else
-    # Check if current version already has a prerelease tag
+    # Method to correctly update to a prerelease version without numeric suffix
+    # First, if we already have a prerelease, revert to stable version
     if [[ $version == *"-"* ]]; then
-      # Increment version without adding a number to the prerelease tag
-      npm --no-git-tag-version version "$bump_type"
-      current_version=$(node -p "require('./package.json').version")
-      npm --no-git-tag-version version "${current_version}-${prerelease}"
+      clean_version=$(echo $version | cut -d'-' -f1)
+      npm --no-git-tag-version version "$clean_version"
+    fi
+
+    # Then increment the version according to type (major, minor, patch)
+    npm --no-git-tag-version version "$bump_type"
+
+    # Then add the prerelease suffix directly without a number
+    current_version=$(node -p "require('./package.json').version")
+    echo "Version before adding prefix: $current_version"
+
+    # Directly modify package.json to avoid npm adding a numeric suffix
+    # The sed syntax differs on macOS
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+      sed -i '' "s/\"version\": \"$current_version\"/\"version\": \"$current_version-$prerelease\"/" package.json
     else
-      # D'abord incrémenter la version selon le type (major, minor, patch)
-      npm --no-git-tag-version version "$bump_type"
-      # Puis ajouter le suffixe préversion directement
-      current_version=$(node -p "require('./package.json').version")
-      npm --no-git-tag-version version "${current_version}-${prerelease}"
+      sed -i "s/\"version\": \"$current_version\"/\"version\": \"$current_version-$prerelease\"/" package.json
+    fi
+
+    # Verification to ensure the version has been updated correctly
+    updated_version=$(node -p "require('./package.json').version")
+    echo "Version after adding prefix: $updated_version"
+
+    # If the version was not updated correctly, display an error message
+    if [[ "$updated_version" != "$current_version-$prerelease" ]]; then
+      echo "$(tput setaf 1)❌ Error updating version. Expected: $current_version-$prerelease, Got: $updated_version$(tput sgr0)"
+      # Alternative correction attempt
+      echo "Attempting correction..."
+      npm version "$current_version-$prerelease" --no-git-tag-version --allow-same-version
     fi
   fi
 
@@ -300,10 +320,17 @@ update_version() {
     git add package-lock.json
   fi
 
-  # Commit the updated package.json with --no-verify to skip hooks
-  git commit --no-verify -m "chore: bump version to v$new_version"
+  # Check if there are changes to commit
+  if ! git diff --cached --quiet; then
+    # Commit the updated package.json with --no-verify to skip hooks
+    git commit --no-verify -m "chore: bump version to v$new_version"
+    echo "$(tput setaf 2)✅ Updated version to $(tput bold)v$new_version$(tput sgr0)"
+  else
+    echo "$(tput setaf 3)⚠ No changes to commit. Version might be already at v$new_version$(tput sgr0)"
+    # Force update of the new_version variable
+    new_version=$(node -p "require('./package.json').version")
+  fi
 
-  echo "$(tput setaf 2)✅ Updated version to $(tput bold)v$new_version$(tput sgr0)"
   echo ""
 
   # Update global version variable
