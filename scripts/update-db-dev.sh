@@ -54,7 +54,7 @@ create_migration() {
     if [ ! -f "$migration_file" ]; then
         echo "❌ Error: migration.sql not found after migration creation."
         exit 1
-    }
+    fi
 
     echo "$migration_file"
 }
