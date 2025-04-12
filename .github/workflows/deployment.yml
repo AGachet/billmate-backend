@@ -298,6 +298,7 @@ jobs:
           # Server Configuration
           PORT=\"3500\"
           NODE_ENV=\"production\"
+          FRONTEND_URL=\"${{ secrets.FRONTEND_URL }}\"
 
           # Database Configuration
           DATABASE_URL=\"${{ secrets.DATABASE_URL }}\"
@@ -315,6 +316,11 @@ jobs:
           JWT_SECRET_REFRESH=\"${{ secrets.JWT_SECRET_REFRESH }}\"
           JWT_SECRET_CONFIRM_ACCOUNT=\"${{ secrets.JWT_SECRET_CONFIRM_ACCOUNT }}\"
           JWT_SECRET_RESET_PASSWORD=\"${{ secrets.JWT_SECRET_RESET_PASSWORD }}\"
+
+          # Mail Service Configuration
+          MAILERSEND_API_KEY=\"${{ secrets.MAILERSEND_API_KEY }}\"
+          MAILERSEND_SENDER_EMAIL=\"noreply@diamondforge.fr\"
+          MAILERSEND_SENDER_NAME=\"Billmate\"
 
           # Log Configuration
           LOG_LEVEL=\"info\"
