@@ -52,8 +52,8 @@ export class SignUpDto {
 
   @ApiPropertyOptional({
     description: 'User locale preference',
-    example: 'en',
-    default: 'en'
+    example: 'EN',
+    default: 'EN'
   })
   @IsOptional()
   @IsString()
