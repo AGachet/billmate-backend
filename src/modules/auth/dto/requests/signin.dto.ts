@@ -41,8 +41,8 @@ export class SignInDto {
 
   @ApiPropertyOptional({
     description: 'User locale preference',
-    example: 'en',
-    default: 'en'
+    example: 'EN',
+    default: 'EN'
   })
   @IsOptional()
   @IsString()
