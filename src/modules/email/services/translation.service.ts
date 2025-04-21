@@ -16,6 +16,7 @@ import { fr } from '@modules/email/locales/fr'
 interface EmailTemplate {
   subject: string
   title: string
+  greeting: string
   body: string
   button: string
   fallback: string

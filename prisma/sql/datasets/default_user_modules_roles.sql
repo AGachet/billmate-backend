@@ -53,14 +53,15 @@ VALUES
 
 
 ------
--- 7. Create the first user (guest user)
+-- 7. Create the technical guest user account
 ------
 DO $$
 DECLARE
   user_id UUID;
 BEGIN
-  INSERT INTO public.users (id, is_active, firstname, lastname, email, password, updated_at)
-  VALUES (gen_random_uuid(), TRUE, 'User', 'Guest', 'user@appguest.com', 'passwordNotUsed', NOW())
+  -- Create user record for guest user (without people association
+  INSERT INTO public.users (id, is_active, email, password, updated_at)
+  VALUES (gen_random_uuid(), TRUE, 'user@appguest.com', 'passwordNotUsed', NOW())
   RETURNING id INTO user_id;
 
   ------
