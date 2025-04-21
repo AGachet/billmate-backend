@@ -66,7 +66,7 @@ export class AuthService {
     const response: SignUpResponseDto = {
       message: 'If the email address is valid, you will receive a confirmation email shortly.'
     }
-    const { email, password, firstname, lastname, locale } = signUpDto
+    const { email, password, locale } = signUpDto
 
     this.logger.debug(`Sign-up attempt for ${email}`, 'signUp')
 
@@ -81,11 +81,10 @@ export class AuthService {
     const hashedPassword = await bcrypt.hash(password, 10)
 
     // Create the user (inactive by default)
+    // Person will be created at first login when the account is activated
     const user = await this.prisma.user.create({
       data: {
         email,
-        firstname,
-        lastname,
         password: hashedPassword,
         isActive: false
       }
@@ -111,7 +110,7 @@ export class AuthService {
 
     // Send confirmation email
     if (this.env.get('NODE_ENV') !== 'test') {
-      await this.emailService.sendAccountConfirmationEmail(email, confirmationToken, firstname, locale)
+      await this.emailService.sendAccountConfirmationEmail(email, confirmationToken, 'User', locale)
     }
 
     this.logger.debug(`Sign-up successful for ${email}`, 'signUp')
@@ -119,7 +118,7 @@ export class AuthService {
   }
 
   async signIn(signInDto: SignInDto): Promise<SignInResponseDto & AuthTokens> {
-    const { email, password, confirmAccountToken, locale } = signInDto
+    const { email, password, confirmAccountToken, firstname, lastname, locale } = signInDto
 
     this.logger.debug(`Sign-in attempt for ${email}`, 'signIn')
 
@@ -133,7 +132,15 @@ export class AuthService {
     }
 
     // Activate user account if a token is provided
-    if (confirmAccountToken) await this.activateUserAccount(user.id, email, confirmAccountToken, locale || UserDefaults.preferences.locale)
+    if (confirmAccountToken) {
+      // Check if firstname and lastname are provided - they are required for first login
+      if (!firstname || !lastname) {
+        this.logger.warn(`Missing required firstname or lastname for first login: ${email}`, 'signIn')
+        throw new BadRequestException('First name and last name are required for account activation')
+      }
+
+      await this.activateUserAccount(user.id, email, confirmAccountToken, firstname, lastname, locale || UserDefaults.preferences.locale)
+    }
 
     // Generate tokens
     const { accessToken, refreshToken } = await this.generateTokens(user)
@@ -177,6 +184,7 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({
       where: { email },
       include: {
+        person: true,
         rolesLinked: {
           include: {
             role: {
@@ -228,7 +236,8 @@ export class AuthService {
 
     // Send reset password email
     if (this.env.get('NODE_ENV') !== 'test') {
-      await this.emailService.sendPasswordResetEmail(email, resetToken, user.firstname || 'User', user.preference?.locale || UserDefaults.preferences.locale)
+      const firstName = user.person?.firstname || 'User'
+      await this.emailService.sendPasswordResetEmail(email, resetToken, firstName, user.preference?.locale || UserDefaults.preferences.locale)
     }
 
     this.logger.debug(`Password reset link sent to ${email}`, 'requestPasswordReset')
@@ -323,6 +332,7 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: {
+        person: true,
         rolesLinked: {
           where: {
             role: {
@@ -376,8 +386,8 @@ export class AuthService {
 
     return {
       userId: user.id,
-      firstname: user.firstname,
-      lastname: user.lastname,
+      firstname: user.person?.firstname || null,
+      lastname: user.person?.lastname || null,
       email: user.email,
       roles,
       modules,
@@ -478,7 +488,7 @@ export class AuthService {
     })
   }
 
-  private async activateUserAccount(userId: string, email: string, confirmAccountToken: string, locale?: Locale): Promise<User> {
+  private async activateUserAccount(userId: string, email: string, confirmAccountToken: string, firstname: string, lastname: string, locale?: Locale): Promise<User> {
     await this.verifyToken(confirmAccountToken, this.env.get('JWT_SECRET_CONFIRM_ACCOUNT'))
 
     // Find the token record
@@ -495,11 +505,21 @@ export class AuthService {
       throw new BadRequestException('Invalid confirmation token')
     }
 
-    // Update user with isActive status, default role and create default preferences
+    // Create People record
+    const person = await this.prisma.people.create({
+      data: {
+        firstname,
+        lastname,
+        email
+      }
+    })
+
+    // Update user with isActive status, default role, link to person, and create default preferences
     const updatedUser = await this.prisma.user.update({
       where: { email },
       data: {
         isActive: true,
+        personId: person.id,
         rolesLinked: {
           create: {
             roleId: UserDefaults.roles.default
