@@ -222,8 +222,6 @@ describe('AuthService', () => {
       expect(prismaService.user.create).toHaveBeenCalledWith({
         data: {
           email: signUpDto.email,
-          firstname: signUpDto.firstname,
-          lastname: signUpDto.lastname,
           password: 'hashedPassword',
           isActive: false
         }
@@ -421,14 +419,24 @@ describe('AuthService', () => {
 
   describe('getMe', () => {
     it('should return user information successfully', async () => {
-      ;(prismaService.user.findUnique as jest.Mock).mockResolvedValue(mockUserWithRoles)
+      // Mock user with person relationship
+      const mockUserWithPersonAndRoles = {
+        ...mockUserWithRoles,
+        person: {
+          firstname: 'Bruce',
+          lastname: 'Wayne',
+          email: 'batman@diamondforge.fr'
+        }
+      }
+
+      ;(prismaService.user.findUnique as jest.Mock).mockResolvedValue(mockUserWithPersonAndRoles)
 
       const result = await service.getMe(mockUser.id)
 
       expect(result).toEqual({
         userId: mockUser.id,
-        firstname: mockUser.firstname,
-        lastname: mockUser.lastname,
+        firstname: mockUserWithPersonAndRoles.person.firstname,
+        lastname: mockUserWithPersonAndRoles.person.lastname,
         email: mockUser.email,
         roles: ['USER'],
         modules: ['USER_ACCOUNT'],

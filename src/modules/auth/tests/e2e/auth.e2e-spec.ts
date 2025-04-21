@@ -131,6 +131,8 @@ describe('Auth Module (e2e)', () => {
         .send({
           email: testUser.email,
           password: testUser.password,
+          firstname: testUser.firstname,
+          lastname: testUser.lastname,
           confirmAccountToken
         })
         .expect(200)
