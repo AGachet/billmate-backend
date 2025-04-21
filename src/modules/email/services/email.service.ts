@@ -33,7 +33,7 @@ export class EmailService {
     private readonly envConfig: EnvConfig
   ) {}
 
-  async sendAccountConfirmationEmail(email: string, confirmationToken: string, firstName: string, locale: Locale = UserDefaults.preferences.locale): Promise<void> {
+  async sendAccountConfirmationEmail(email: string, confirmationToken: string, firstName?: string, locale: Locale = UserDefaults.preferences.locale): Promise<void> {
     try {
       this.logger.log(`Sending account confirmation email to ${email}`)
       const confirmationUrl = `${this.envConfig.get('FRONTEND_URL')}/signin?confirmAccountToken=${confirmationToken}`
@@ -54,7 +54,7 @@ export class EmailService {
     }
   }
 
-  async sendPasswordResetEmail(email: string, resetToken: string, firstName: string, locale: Locale = UserDefaults.preferences.locale): Promise<void> {
+  async sendPasswordResetEmail(email: string, resetToken: string, firstName?: string, locale: Locale = UserDefaults.preferences.locale): Promise<void> {
     try {
       this.logger.log(`Sending password reset email to ${email}`)
       const resetUrl = `${this.envConfig.get('FRONTEND_URL')}/reset-password?resetPasswordToken=${resetToken}`

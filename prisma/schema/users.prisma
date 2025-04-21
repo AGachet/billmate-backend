@@ -17,19 +17,35 @@ enum TokenType {
 }
 
 /**
+ * Table : People
+ */
+model People {
+  id          String    @id @default(cuid())
+  firstname   String?   @db.VarChar(30)
+  lastname    String?   @db.VarChar(30)
+  email       String?   @db.VarChar(100)
+  createdAt   DateTime  @default(now())               @map("created_at")
+  updatedAt   DateTime  @updatedAt                    @map("updated_at")
+
+  user        User?
+
+  @@map("people")
+}
+
+/**
  * Table : User
  */
 model User {
   id           String    @id @default(cuid())
   isActive     Boolean   @default(false)               @map("is_active")
-  firstname    String?   @db.VarChar(30)
-  lastname     String?   @db.VarChar(30)
+  personId     String?   @unique                       @map("person_id")
   email        String    @unique @db.VarChar(100)
   password     String    @db.VarChar(255)
   lastLoginAt  DateTime?                               @map("last_login_at")
   createdAt    DateTime  @default(now())               @map("created_at")
   updatedAt    DateTime  @updatedAt                    @map("updated_at")
 
+  person       People?   @relation(fields: [personId], references: [id])
   tokens       UserToken[]
   rolesLinked  UserRoleLink[]
   preference   UserPreference?
