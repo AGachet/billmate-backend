@@ -38,17 +38,18 @@ model People {
 model User {
   id           String    @id @default(cuid())
   isActive     Boolean   @default(false)               @map("is_active")
-  personId     String?   @unique                       @map("person_id")
+  peopleId     String?   @unique                       @map("people_id")
   email        String    @unique @db.VarChar(100)
   password     String    @db.VarChar(255)
   lastLoginAt  DateTime?                               @map("last_login_at")
   createdAt    DateTime  @default(now())               @map("created_at")
   updatedAt    DateTime  @updatedAt                    @map("updated_at")
 
-  person       People?   @relation(fields: [personId], references: [id])
+  people       People?   @relation(fields: [peopleId], references: [id])
   tokens       UserToken[]
   rolesLinked  UserRoleLink[]
   preference   UserPreference?
+  accountsLinked UserAccountLink[]
 
   @@index([isActive])
   @@map("users")
