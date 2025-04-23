@@ -30,6 +30,7 @@ jest.mock('@configs/prisma/services/prisma.service')
 jest.mock('@common/services/logger/logger.service')
 jest.mock('@configs/env/services/env.service')
 jest.mock('@modules/email/services/email.service')
+jest.mock('@modules/accounts/services/account.service')
 
 /**
  * Test Data
@@ -38,12 +39,19 @@ const mockUser = {
   id: '1',
   email: 'batman@diamondforge.fr',
   password: 'brucewaynepassword',
-  firstname: 'Bruce',
-  lastname: 'Wayne',
   isActive: true,
   createdAt: new Date(),
   updatedAt: new Date(),
   lastLoginAt: new Date()
+}
+
+const mockAccount = {
+  id: '1',
+  name: 'Wayne Enterprises',
+  description: 'Main business account',
+  isActive: true,
+  createdAt: new Date(),
+  updatedAt: new Date()
 }
 
 const mockToken = 'mock.jwt.token'
@@ -94,6 +102,14 @@ const mockUserWithRoles = {
         ]
       }
     }
+  ],
+  accountsLinked: [
+    {
+      role: 'ADMIN',
+      account: mockAccount,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    }
   ]
 }
 
@@ -138,6 +154,15 @@ describe('AuthService', () => {
             },
             role: {
               findFirst: jest.fn()
+            },
+            userAccountLink: {
+              create: jest.fn()
+            },
+            people: {
+              create: jest.fn()
+            },
+            account: {
+              create: jest.fn()
             }
           }
         },
@@ -276,6 +301,70 @@ describe('AuthService', () => {
 
       await expect(service.signIn(signInDto)).rejects.toThrow(UnauthorizedException)
       expect(logger.warn).toHaveBeenCalledWith('Invalid password for user: test@example.com', 'validateUser')
+    })
+
+    it('should create account when signing in with confirmation token', async () => {
+      const signInWithTokenDto = {
+        ...signInDto,
+        firstname: 'John',
+        lastname: 'Doe',
+        confirmAccountToken: 'valid.token'
+      }
+
+      // Mock validateUser
+      ;(prismaService.user.findUnique as jest.Mock).mockResolvedValue({
+        ...mockUser,
+        isActive: false
+      })
+      ;(bcrypt.compare as jest.Mock).mockResolvedValue(true)
+
+      // Mock token verification
+      jwtService.verify.mockReturnValue({ email: mockUser.email, sub: mockUser.id })
+
+      // Mock userToken find for activateUserAccount
+      ;(prismaService.userToken.findFirst as jest.Mock).mockResolvedValue({
+        id: '1',
+        userId: mockUser.id,
+        token: 'valid.token',
+        type: 'ACCOUNT_VALIDATION'
+      })
+
+      // Mock people create
+      ;(prismaService.people.create as jest.Mock).mockResolvedValue({
+        id: '2',
+        firstname: 'John',
+        lastname: 'Doe',
+        email: 'test@example.com'
+      })
+
+      // Mock account create
+      ;(prismaService.account.create as jest.Mock).mockResolvedValue(mockAccount)
+
+      // Mock user update
+      ;(prismaService.user.update as jest.Mock).mockResolvedValue({
+        ...mockUser,
+        isActive: true,
+        peopleId: '2'
+      })
+
+      // Mock generateTokens
+      ;(prismaService.userToken.create as jest.Mock).mockResolvedValue({ id: '1', token: mockToken })
+
+      const result = await service.signIn(signInWithTokenDto)
+
+      expect(result).toEqual({
+        userId: mockUser.id,
+        accessToken: mockToken,
+        refreshToken: mockToken
+      })
+
+      expect(prismaService.user.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { email: signInWithTokenDto.email }
+        })
+      )
+
+      expect(prismaService.account.create).toHaveBeenCalled()
     })
   })
 
@@ -419,13 +508,16 @@ describe('AuthService', () => {
 
   describe('getMe', () => {
     it('should return user information successfully', async () => {
-      // Mock user with person relationship
+      // Mock user avec la structure exacte attendue par le service
       const mockUserWithPersonAndRoles = {
         ...mockUserWithRoles,
-        person: {
+        people: {
+          id: '2',
           firstname: 'Bruce',
           lastname: 'Wayne',
-          email: 'batman@diamondforge.fr'
+          email: 'batman@diamondforge.fr',
+          createdAt: new Date(),
+          updatedAt: new Date()
         }
       }
 
@@ -433,16 +525,26 @@ describe('AuthService', () => {
 
       const result = await service.getMe(mockUser.id)
 
+      // check that all properties, including firstname and lastname, have the expected values
       expect(result).toEqual({
         userId: mockUser.id,
-        firstname: mockUserWithPersonAndRoles.person.firstname,
-        lastname: mockUserWithPersonAndRoles.person.lastname,
         email: mockUser.email,
+        firstname: 'Bruce',
+        lastname: 'Wayne',
         roles: ['USER'],
         modules: ['USER_ACCOUNT'],
         permissions: ['READ_OWN_PROFILE'],
+        accounts: [
+          {
+            id: mockAccount.id,
+            name: mockAccount.name,
+            description: mockAccount.description,
+            isActive: mockAccount.isActive
+          }
+        ],
         createdAt: mockUser.createdAt
       })
+
       expect(logger.debug).toHaveBeenCalledWith('Getting user information for 1', 'getMe')
     })
 
