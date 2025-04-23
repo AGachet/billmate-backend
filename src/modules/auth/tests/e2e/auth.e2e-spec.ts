@@ -14,6 +14,7 @@ import { LoggerModule } from '@common/services/logger/logger.module'
 import { EnvModule } from '@configs/env/env.module'
 import { PrismaModule } from '@configs/prisma/prisma.module'
 import { PrismaService } from '@configs/prisma/services/prisma.service'
+import { AccountsModule } from '@modules/accounts/accounts.module'
 import { AuthModule } from '@modules/auth/auth.module'
 
 // Load test environment variables
@@ -50,13 +51,14 @@ describe('Auth Module (e2e)', () => {
 
   // Variables to store tokens and user ID
   let userId: string
+  let accountId: string
   let confirmAccountToken: string
   let resetPasswordToken: string
 
   beforeAll(async () => {
     // Create NestJS application
     const moduleRef: TestingModule = await Test.createTestingModule({
-      imports: [AuthModule, LoggerModule, EnvModule, PrismaModule]
+      imports: [AuthModule, AccountsModule, LoggerModule, EnvModule, PrismaModule]
     }).compile()
 
     app = moduleRef.createNestApplication()
@@ -88,7 +90,7 @@ describe('Auth Module (e2e)', () => {
     await app.close()
   })
 
-  describe('Complete authentication flow', () => {
+  describe('Complete authentication flow with account creation', () => {
     it('Should create a new user (signup)', async () => {
       const response = await agent.post('/api/auth/signup').send(testUser).expect(200)
 
@@ -146,6 +148,21 @@ describe('Auth Module (e2e)', () => {
       })
 
       expect(user?.isActive).toBe(true)
+
+      // check that an account has been created for the user
+      const accounts = await prismaService.account.findMany({
+        where: {
+          users: {
+            some: {
+              userId
+            }
+          }
+        }
+      })
+
+      expect(accounts.length).toBeGreaterThan(0)
+      // store the ID of the first account for next tests
+      accountId = accounts[0].id
     })
 
     it('Should logout the user (signout)', async () => {
@@ -207,12 +224,24 @@ describe('Auth Module (e2e)', () => {
       expect(response.body).toHaveProperty('firstname')
       expect(response.body).toHaveProperty('lastname')
       expect(response.body).toHaveProperty('roles')
+      expect(response.body).toHaveProperty('accounts')
 
       expect(response.body.userId).toBe(userId)
       expect(response.body.firstname).toBe(testUser.firstname)
       expect(response.body.lastname).toBe(testUser.lastname)
       expect(response.body.email).toBe(testUser.email)
       expect(response.body.roles).toEqual(['user'])
+
+      // Verify account information
+      expect(response.body.accounts).toBeInstanceOf(Array)
+      expect(response.body.accounts.length).toBeGreaterThan(0)
+
+      // check that the account is active
+      const account = response.body.accounts.find((acc) => acc.id === accountId)
+      if (account) {
+        expect(account.name).toBeDefined()
+        expect(account.isActive).toBe(true)
+      }
     })
 
     it('Should retrieve guest information', async () => {
