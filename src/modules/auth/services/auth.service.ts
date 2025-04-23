@@ -29,7 +29,7 @@ import type { SignOutDto } from '@modules/auth/dto/requests/signout.dto'
 import type { SignUpDto } from '@modules/auth/dto/requests/signup.dto'
 
 import type { GuestResponseDto } from '@modules/auth/dto/responses/guest.response.dto'
-import type { MeResponseDto } from '@modules/auth/dto/responses/me.response.dto'
+import type { AccountDto, MeResponseDto } from '@modules/auth/dto/responses/me.response.dto'
 import type { RequestPasswordResetResponseDto } from '@modules/auth/dto/responses/request-password-reset.response.dto'
 import type { ResetPasswordResponseDto } from '@modules/auth/dto/responses/reset-password.response.dto'
 import type { SignInResponseDto } from '@modules/auth/dto/responses/signin.response.dto'
@@ -184,7 +184,7 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({
       where: { email },
       include: {
-        person: true,
+        people: true,
         rolesLinked: {
           include: {
             role: {
@@ -236,7 +236,7 @@ export class AuthService {
 
     // Send reset password email
     if (this.env.get('NODE_ENV') !== 'test') {
-      const firstName = user.person?.firstname || 'User'
+      const firstName = user.people?.firstname || 'User'
       await this.emailService.sendPasswordResetEmail(email, resetToken, firstName, user.preference?.locale || UserDefaults.preferences.locale)
     }
 
@@ -328,11 +328,11 @@ export class AuthService {
   async getMe(userId: string): Promise<MeResponseDto> {
     this.logger.debug(`Getting user information for ${userId}`, 'getMe')
 
-    // Get user with roles, modules and permissions
+    // Get user with roles, modules, permissions and accounts
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: {
-        person: true,
+        people: true,
         rolesLinked: {
           where: {
             role: {
@@ -364,6 +364,11 @@ export class AuthService {
               }
             }
           }
+        },
+        accountsLinked: {
+          include: {
+            account: true
+          }
         }
       }
     })
@@ -384,14 +389,23 @@ export class AuthService {
       .flatMap((userRole) => userRole.role.permissionsLinked.filter((permissionLink) => permissionLink.permission.module?.isActive).map((permissionLink) => permissionLink.permission.name))
       .filter((value, index, self) => self.indexOf(value) === index) // Remove possible duplicates
 
+    // Transform user.accountsLinked into AccountDto objects
+    const accounts: AccountDto[] = user.accountsLinked.map((link) => ({
+      id: link.account.id,
+      name: link.account.name,
+      description: link.account.description,
+      isActive: link.account.isActive
+    }))
+
     return {
       userId: user.id,
-      firstname: user.person?.firstname || null,
-      lastname: user.person?.lastname || null,
+      firstname: user.people?.firstname || null,
+      lastname: user.people?.lastname || null,
       email: user.email,
       roles,
       modules,
       permissions,
+      accounts,
       createdAt: user.createdAt
     }
   }
@@ -514,15 +528,25 @@ export class AuthService {
       }
     })
 
+    // Create a default Account for the user (minimal model, no extra fields needed)
+    const account = await this.prisma.account.create({
+      data: {}
+    })
+
     // Update user with isActive status, default role, link to person, and create default preferences
     const updatedUser = await this.prisma.user.update({
       where: { email },
       data: {
         isActive: true,
-        personId: person.id,
+        peopleId: person.id,
         rolesLinked: {
           create: {
             roleId: UserDefaults.roles.default
+          }
+        },
+        accountsLinked: {
+          create: {
+            accountId: account.id
           }
         },
         preference: {

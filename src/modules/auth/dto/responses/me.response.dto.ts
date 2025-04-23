@@ -1,5 +1,33 @@
 import { ApiProperty } from '@nestjs/swagger'
 
+export class AccountDto {
+  @ApiProperty({
+    description: 'Account unique identifier',
+    example: '123e4567-e89b-12d3-a456-426614174000'
+  })
+  id: string
+
+  @ApiProperty({
+    description: 'Account name',
+    example: 'Main account'
+  })
+  name: string
+
+  @ApiProperty({
+    description: 'Account description',
+    example: 'This is the main account for managing finances',
+    required: false,
+    nullable: true
+  })
+  description: string | null
+
+  @ApiProperty({
+    description: 'Account active status',
+    example: true
+  })
+  isActive: boolean
+}
+
 export class MeResponseDto {
   @ApiProperty({
     description: 'User unique identifier',
@@ -47,6 +75,12 @@ export class MeResponseDto {
     isArray: true
   })
   permissions: string[]
+
+  @ApiProperty({
+    description: 'User accounts',
+    type: [AccountDto]
+  })
+  accounts: AccountDto[]
 
   @ApiProperty({
     description: 'Account creation date',
