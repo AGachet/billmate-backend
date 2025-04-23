@@ -2,7 +2,7 @@
  * Resources
  */
 import { Body, Controller, Get, HttpCode, HttpStatus, Post, Req, Res, UseGuards } from '@nestjs/common'
-import { ApiBadRequestResponse, ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags, ApiUnauthorizedResponse } from '@nestjs/swagger'
+import { ApiBadRequestResponse, ApiOkResponse, ApiOperation, ApiTags, ApiUnauthorizedResponse } from '@nestjs/swagger'
 
 /**
  * Dependencies
@@ -69,8 +69,12 @@ export class AuthController {
   }
 
   @Post('signout')
+  @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'User logout', description: 'Invalidate user session and clear authentication tokens.' })
+  @ApiOperation({
+    summary: 'User logout',
+    description: 'Invalidate user session and clear authentication tokens.'
+  })
   @ApiOkResponse({ type: SignOutResponseDto })
   @ApiUnauthorizedResponse({ description: 'Invalid refresh token.' })
   async signOut(@Res({ passthrough: true }) response: Response, @Body() signOutDto: SignOutDto): Promise<SignOutResponseDto> {
@@ -83,11 +87,11 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Request password reset',
-    description: 'Request a password reset. If the email is valid and the account has the necessary permissions, a reset email will be sent.'
+    description: 'Request a password reset. If the email is valid, a reset email will be sent.'
   })
   @ApiOkResponse({
     type: RequestPasswordResetResponseDto,
-    description: 'Request processed. If the email is valid and has permission to reset password, reset instructions will be sent.'
+    description: 'Request processed. If the email is valid, reset instructions will be sent.'
   })
   async requestPasswordReset(@Body() requestPasswordResetDto: RequestPasswordResetDto): Promise<RequestPasswordResetResponseDto> {
     return this.authService.requestPasswordReset(requestPasswordResetDto)
@@ -95,7 +99,10 @@ export class AuthController {
 
   @Post('reset-password')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Reset password', description: 'Reset user password using the token received by email.' })
+  @ApiOperation({
+    summary: 'Reset password',
+    description: 'Reset user password using the token received by email.'
+  })
   @ApiOkResponse({ type: ResetPasswordResponseDto })
   @ApiBadRequestResponse({ description: 'Invalid or expired token.' })
   async resetPassword(@Body() resetPasswordDto: ResetPasswordDto): Promise<ResetPasswordResponseDto> {
@@ -105,8 +112,10 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @Get('me')
   @HttpCode(HttpStatus.OK)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get current user', description: 'Retrieve the profile of the currently authenticated user.' })
+  @ApiOperation({
+    summary: 'Get current user',
+    description: 'Retrieve the profile of the currently authenticated user. Requires USER_ACCOUNT_MANAGEMENT module and USER_PROFILE_VIEW_OWN permission.'
+  })
   @ApiOkResponse({ type: MeResponseDto })
   @ApiUnauthorizedResponse({ description: 'Unauthorized - Invalid or missing token.' })
   async getMe(@Req() request: AuthenticatedRequest): Promise<MeResponseDto> {
