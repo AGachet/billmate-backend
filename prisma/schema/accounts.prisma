@@ -9,8 +9,12 @@ model Account {
   createdAt   DateTime  @default(now())           @map("created_at")
   updatedAt   DateTime  @updatedAt                @map("updated_at")
 
-  // Relations
-  users       UserAccountLink[]
+  organizationsLinked OrganizationAccountLink[]
+  usersLinked         UserAccountLink[]
+  peopleLinked        PeopleAccountLink[]
+
+  entities Entity[]   @relation("EntityAccount")
+  roles    Role[]     @relation("RoleAccount")
 
   @@index([isActive])
   @@map("accounts")
@@ -33,4 +37,23 @@ model UserAccountLink {
   @@index([userId])
   @@index([accountId])
   @@map("users_accounts_links")
+}
+
+/**
+ * Table : Relation People - Account
+ * This establishes a many-to-many relationship between people and accounts
+ */
+model PeopleAccountLink {
+  peopleId    String                              @map("people_id")
+  accountId   String                              @map("account_id")
+  createdAt   DateTime  @default(now())           @map("created_at")
+  updatedAt   DateTime  @updatedAt                @map("updated_at")
+
+  people      People    @relation(fields: [peopleId], references: [id], onDelete: Cascade)
+  account     Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@id([peopleId, accountId])
+  @@index([peopleId])
+  @@index([accountId])
+  @@map("people_accounts_links")
 }
