@@ -3,6 +3,9 @@ import { SetMetadata } from '@nestjs/common'
 export const PERMISSIONS_KEY = 'permissions'
 export const MODULE_KEY = 'required_module'
 
+// Special permission to indicate full access without specific permissions
+export const FULL_ACCESS = '$_FULL_ACCESS'
+
 export interface PermissionRequirement {
   module: string
   permissions: string[]
