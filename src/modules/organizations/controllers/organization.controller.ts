@@ -41,7 +41,7 @@ export class OrganizationController {
   constructor(private readonly organizationService: OrganizationService) {}
 
   @Get(':id')
-  @RequirePermissions([], 'ORGANIZATION_MANAGEMENT')
+  @RequirePermissions([], 'ORGANIZATION_ADMINISTRATION')
   @UseGuards(PermissionsGuard)
   /** Start -- Documentation */
   @ApiOperation({ summary: 'Fetch organization details', description: 'Fetch detailed account information.' })
@@ -59,7 +59,7 @@ export class OrganizationController {
   }
 
   @Post()
-  @RequirePermissions(['ORGANIZATION_CREATION'], 'ORGANIZATION_MANAGEMENT')
+  @RequirePermissions(['ORGANIZATION_CREATION'], 'ORGANIZATION_ADMINISTRATION')
   @UseGuards(PermissionsGuard)
   /** Start -- Documentation */
   @ApiOperation({ summary: 'Create organization', description: 'Create a new organization for an account.' })
@@ -76,7 +76,7 @@ export class OrganizationController {
   }
 
   @Patch(':id')
-  @RequirePermissions(['ORGANIZATION_ADMINISTRATION_OWN'], 'ORGANIZATION_MANAGEMENT')
+  @RequirePermissions(['ORGANIZATION_UPDATE'], 'ORGANIZATION_ADMINISTRATION')
   @UseGuards(PermissionsGuard)
   /** Start -- Documentation */
   @ApiOperation({ summary: 'Update organization', description: 'Update the organization details.' })

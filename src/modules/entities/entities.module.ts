@@ -14,7 +14,6 @@ import { EntityService } from './services/entity.service'
  */
 @Module({
   controllers: [EntitiesController],
-  providers: [EntityService],
-  exports: [EntityService]
+  providers: [EntityService]
 })
 export class EntitiesModule {}

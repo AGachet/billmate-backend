@@ -14,7 +14,6 @@ import { AccountService } from '@modules/accounts/services/account.service'
  */
 @Module({
   controllers: [AccountController],
-  providers: [AccountService],
-  exports: [AccountService]
+  providers: [AccountService]
 })
 export class AccountsModule {}

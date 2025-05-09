@@ -109,6 +109,34 @@ export class EntityService {
       const usersToRemove = currentUserIds.filter((id) => !userIds.includes(id))
       const usersToAdd = userIds.filter((id) => !currentUserIds.includes(id))
 
+      // Check if we're trying to remove all users
+      if (usersToRemove.length === currentUserIds.length) {
+        // Get all active users linked to the account (directly or via other entities)
+        const accountUsers = await this.prisma.userAccountLink.findMany({
+          where: {
+            accountId: entity.accountId,
+            user: { isActive: true }
+          }
+        })
+
+        const otherEntitiesUsers = await this.prisma.userEntityLink.findMany({
+          where: {
+            entity: {
+              accountId: entity.accountId,
+              id: { not: entityId },
+              isActive: true
+            },
+            user: { isActive: true }
+          }
+        })
+
+        const activeUsersCount = new Set([...accountUsers.map((link) => link.userId), ...otherEntitiesUsers.map((link) => link.userId)]).size
+
+        if (activeUsersCount === 0) {
+          throw new BadRequestException('Cannot remove all users from the entity as there are no active users linked to the account or other entities')
+        }
+      }
+
       // Update users
       await this.prisma.$transaction(async (prisma) => {
         // Remove users
