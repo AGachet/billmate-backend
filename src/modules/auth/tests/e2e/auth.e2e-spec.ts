@@ -10,6 +10,7 @@ import request from 'supertest'
 /**
  * Dependencies
  */
+import { AccountAccessModule } from '@common/services/account-access/account-access.module'
 import { LoggerModule } from '@common/services/logger/logger.module'
 import { EnvModule } from '@configs/env/env.module'
 import { PrismaModule } from '@configs/prisma/prisma.module'
@@ -58,7 +59,7 @@ describe('Auth Module (e2e)', () => {
   beforeAll(async () => {
     // Create NestJS application
     const moduleRef: TestingModule = await Test.createTestingModule({
-      imports: [AuthModule, AccountsModule, LoggerModule, EnvModule, PrismaModule]
+      imports: [AuthModule, AccountsModule, LoggerModule, EnvModule, PrismaModule, AccountAccessModule]
     }).compile()
 
     app = moduleRef.createNestApplication()
@@ -152,7 +153,7 @@ describe('Auth Module (e2e)', () => {
       // check that an account has been created for the user
       const accounts = await prismaService.account.findMany({
         where: {
-          users: {
+          usersLinked: {
             some: {
               userId
             }

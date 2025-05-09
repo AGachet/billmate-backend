@@ -87,7 +87,7 @@ export async function setupTestAccounts(prisma: PrismaService): Promise<TestAcco
           name: 'Test Account 1',
           description: 'Account for testing status updates',
           isActive: true, // First account initially active
-          users: {
+          usersLinked: {
             create: {
               userId: newUser.id
             }
@@ -101,7 +101,7 @@ export async function setupTestAccounts(prisma: PrismaService): Promise<TestAcco
           name: 'Test Account 2',
           description: 'Account for testing status updates',
           isActive: false, // Second account initially inactive
-          users: {
+          usersLinked: {
             create: {
               userId: newUser.id
             }
