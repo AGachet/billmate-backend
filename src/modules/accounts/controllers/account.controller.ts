@@ -43,7 +43,7 @@ export class AccountController {
   constructor(private readonly accountService: AccountService) {}
 
   @Get(':id')
-  @RequirePermissions([], 'ACCOUNT_MANAGEMENT')
+  @RequirePermissions([], 'ACCOUNT_ADMINISTRATION')
   @UseGuards(PermissionsGuard)
   /** Start -- Documentation */
   @ApiOperation({ summary: 'Fetch account details', description: 'Fetch detailed account information including users, entities, and roles.' })
@@ -57,7 +57,7 @@ export class AccountController {
   }
 
   @Patch(':id/status')
-  @RequirePermissions(['ACCOUNT_ADMINISTRATION_OWN'], 'ACCOUNT_MANAGEMENT')
+  @RequirePermissions(['ACCOUNT_UPDATE'], 'ACCOUNT_ADMINISTRATION')
   @UseGuards(PermissionsGuard)
   /** Start -- Documentation */
   @ApiOperation({ summary: 'Update account status', description: 'Activate or deactivate an account that the user has access to.' })
@@ -72,7 +72,7 @@ export class AccountController {
   }
 
   @Patch(':id/users')
-  @RequirePermissions(['ACCOUNT_USER_MANAGEMENT'], 'ACCOUNT_MANAGEMENT')
+  @RequirePermissions(['ACCOUNT_USER_MANAGEMENT'], 'ACCOUNT_ADMINISTRATION')
   @UseGuards(PermissionsGuard)
   /** Start -- Documentation */
   @ApiOperation({ summary: 'Update account users', description: 'Update the users linked to an account.' })

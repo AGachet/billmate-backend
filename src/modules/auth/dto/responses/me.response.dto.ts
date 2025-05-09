@@ -28,6 +28,47 @@ export class AccountDto {
   isActive: boolean
 }
 
+export class OrganizationDto {
+  @ApiProperty({
+    description: 'Organization unique identifier',
+    example: '123e4567-e89b-12d3-a456-426614174000'
+  })
+  id: string
+
+  @ApiProperty({
+    description: 'Organization name',
+    example: 'ACME Corporation'
+  })
+  name: string
+}
+
+export class EntityDto {
+  @ApiProperty({
+    description: 'Entity unique identifier',
+    example: '123e4567-e89b-12d3-a456-426614174000'
+  })
+  id: string
+
+  @ApiProperty({
+    description: 'Entity name',
+    example: 'Finance Department'
+  })
+  name: string
+
+  @ApiProperty({
+    description: 'Entity active status',
+    example: true
+  })
+  isActive: boolean
+
+  @ApiProperty({
+    description: 'Organization information',
+    type: OrganizationDto,
+    nullable: true
+  })
+  organization: OrganizationDto | null
+}
+
 export class MeResponseDto {
   @ApiProperty({
     description: 'User unique identifier',
@@ -81,6 +122,12 @@ export class MeResponseDto {
     type: [AccountDto]
   })
   accounts: AccountDto[]
+
+  @ApiProperty({
+    description: 'User entities',
+    type: [EntityDto]
+  })
+  entities: EntityDto[]
 
   @ApiProperty({
     description: 'Account creation date',
