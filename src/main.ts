@@ -3,18 +3,18 @@
  */
 import { ValidationPipe } from '@nestjs/common'
 import { NestFactory } from '@nestjs/core'
-import cookieParser from 'cookie-parser'
 import chalk from 'chalk'
+import cookieParser from 'cookie-parser'
 import 'dotenv/config'
 
 /**
  * Dependencies
  */
-import { AppModule } from './app.module'
-import { EnvConfig } from '@configs/env/services/env.service'
-import { Logger } from '@common/services/logger/logger.service'
 import { GlobalExceptionFilter } from '@common/filters/global-exception.filter'
-import { ApiDocsService } from './modules/api-docs/services/api-docs.service'
+import { Logger } from '@common/services/logger/logger.service'
+import { EnvConfig } from '@configs/env/services/env.service'
+import { ApiDocsService } from '@modules/api-docs/services/api-docs.service'
+import { AppModule } from './app.module'
 
 /**
  * Declaration

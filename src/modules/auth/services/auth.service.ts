@@ -1,7 +1,7 @@
 /**
  * Resources
  */
-import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common'
+import { BadRequestException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common'
 import { JwtService } from '@nestjs/jwt'
 import { Locale } from '@prisma/client'
 import * as bcrypt from 'bcrypt'
@@ -29,7 +29,7 @@ import type { SignOutDto } from '@modules/auth/dto/requests/signout.dto'
 import type { SignUpDto } from '@modules/auth/dto/requests/signup.dto'
 
 import type { GuestResponseDto } from '@modules/auth/dto/responses/guest.response.dto'
-import type { AccountDto, MeResponseDto } from '@modules/auth/dto/responses/me.response.dto'
+import type { AccountDto, EntityDto, MeResponseDto } from '@modules/auth/dto/responses/me.response.dto'
 import type { RequestPasswordResetResponseDto } from '@modules/auth/dto/responses/request-password-reset.response.dto'
 import type { ResetPasswordResponseDto } from '@modules/auth/dto/responses/reset-password.response.dto'
 import type { SignInResponseDto } from '@modules/auth/dto/responses/signin.response.dto'
@@ -328,85 +328,114 @@ export class AuthService {
   async getMe(userId: string): Promise<MeResponseDto> {
     this.logger.debug(`Getting user information for ${userId}`, 'getMe')
 
-    // Get user with roles, modules, permissions and accounts
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      include: {
-        people: true,
-        rolesLinked: {
-          where: {
-            role: {
-              isActive: true
-            }
-          },
-          include: {
-            role: {
-              include: {
-                modulesLinked: {
-                  where: {
-                    module: {
-                      isActive: true
+    try {
+      // Get user with roles and modules
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        include: {
+          people: true,
+          rolesLinked: {
+            include: {
+              role: {
+                include: {
+                  modulesLinked: {
+                    include: {
+                      module: true
                     }
                   },
-                  include: {
-                    module: true
-                  }
-                },
-                permissionsLinked: {
-                  include: {
-                    permission: {
-                      include: {
-                        module: true
+                  permissionsLinked: {
+                    include: {
+                      permission: {
+                        include: {
+                          module: true
+                        }
                       }
                     }
                   }
                 }
               }
             }
-          }
-        },
-        accountsLinked: {
-          include: {
-            account: true
+          },
+          accountsLinked: {
+            include: {
+              account: true
+            }
+          },
+          entitiesLinked: {
+            include: {
+              entity: {
+                include: {
+                  organization: true
+                }
+              }
+            }
           }
         }
+      })
+
+      if (!user) {
+        throw new NotFoundException('User not found')
       }
-    })
 
-    if (!user) {
-      this.logger.warn(`User not found: ${userId}`, 'getMe')
-      throw new BadRequestException('User not found')
-    }
+      // Extract roles from user roles (names only)
+      const roles = user.rolesLinked.map((userRole) => userRole.role.name)
 
-    // Extract active roles
-    const roles = user.rolesLinked.map((userRole) => userRole.role.name)
+      // Extract modules from active roles (modules attached and active)
+      const modules = user.rolesLinked
+        .flatMap((userRole) => userRole.role.modulesLinked.filter((moduleLink) => moduleLink.module.isActive).map((moduleLink) => moduleLink.module.name))
+        .filter((value, index, self) => self.indexOf(value) === index) // Remove possible duplicates
 
-    // Extract modules from active roles (modules attached and active)
-    const modules = user.rolesLinked.flatMap((userRole) => userRole.role.modulesLinked.map((moduleLink) => moduleLink.module.name)).filter((value, index, self) => self.indexOf(value) === index) // Remove possible duplicates
+      // Extract permissions from active roles (permissions attached to active roles and modules)
+      const permissions = user.rolesLinked
+        .flatMap((userRole) => userRole.role.permissionsLinked.filter((permissionLink) => permissionLink.permission.module?.isActive).map((permissionLink) => permissionLink.permission.name))
+        .filter((value, index, self) => self.indexOf(value) === index) // Remove possible duplicates
 
-    // Extract permissions from active roles (permissions attached to active roles and modules)
-    const permissions = user.rolesLinked
-      .flatMap((userRole) => userRole.role.permissionsLinked.filter((permissionLink) => permissionLink.permission.module?.isActive).map((permissionLink) => permissionLink.permission.name))
-      .filter((value, index, self) => self.indexOf(value) === index) // Remove possible duplicates
+      // Transform user.accountsLinked into AccountDto objects
+      const accounts: AccountDto[] = user.accountsLinked.map((link) => ({
+        id: link.account.id,
+        name: link.account.name,
+        description: link.account.description,
+        isActive: link.account.isActive
+      }))
 
-    // Transform user.accountsLinked into AccountDto objects
-    const accounts: AccountDto[] = user.accountsLinked.map((link) => ({
-      id: link.account.id,
-      name: link.account.name,
-      description: link.account.description,
-      isActive: link.account.isActive
-    }))
+      // Extract user.entitiesLinked into EntityDto objects
+      const entities = user.entitiesLinked.map((link) => {
+        const entityData: EntityDto = {
+          id: link.entity.id,
+          name: link.entity.name,
+          isActive: link.entity.isActive,
+          organization: null
+        }
 
-    return {
-      userId: user.id,
-      firstname: user.people?.firstname || null,
-      lastname: user.people?.lastname || null,
-      email: user.email,
-      roles,
-      modules,
-      permissions,
-      accounts,
-      createdAt: user.createdAt
+        // Only set organization if it exists
+        if (link.entity.organization) {
+          entityData.organization = {
+            id: link.entity.organization.id,
+            name: link.entity.organization.name
+          }
+        }
+
+        return entityData
+      })
+
+      return {
+        userId: user.id,
+        firstname: user.people?.firstname || null,
+        lastname: user.people?.lastname || null,
+        email: user.email,
+        roles,
+        modules,
+        permissions,
+        accounts,
+        entities,
+        createdAt: user.createdAt
+      }
+    } catch (error) {
+      this.logger.error(`Failed to get user information for ${userId}: ${error.message}`, 'getMe')
+      if (error instanceof NotFoundException) {
+        throw error
+      }
+      throw new BadRequestException('Failed to get user information')
     }
   }
 
