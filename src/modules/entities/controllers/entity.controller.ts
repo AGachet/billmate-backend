@@ -42,7 +42,7 @@ export class EntitiesController {
   constructor(private readonly entityService: EntityService) {}
 
   @Post()
-  @RequirePermissions(['ENTITY_CREATION'], 'ENTITY_MANAGEMENT')
+  @RequirePermissions(['ENTITY_CREATION'], 'ACCOUNT_ADMINISTRATION')
   @UseGuards(PermissionsGuard)
   /** Start -- Documentation */
   @ApiOperation({ summary: 'Create entity', description: 'Create a new entity and link it to an account and organization.' })
@@ -55,7 +55,7 @@ export class EntitiesController {
   }
 
   @Patch(':id/users')
-  @RequirePermissions(['ENTITY_USER_MANAGEMENT'], 'ENTITY_MANAGEMENT')
+  @RequirePermissions(['ENTITY_USER_MANAGEMENT'], 'ACCOUNT_ADMINISTRATION')
   @UseGuards(PermissionsGuard)
   /** Start -- Documentation */
   @ApiOperation({ summary: 'Update entity users', description: 'Update the users linked to an entity.' })

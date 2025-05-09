@@ -14,7 +14,6 @@ import { OrganizationService } from '@modules/organizations/services/organizatio
  */
 @Module({
   controllers: [OrganizationController],
-  providers: [OrganizationService],
-  exports: [OrganizationService]
+  providers: [OrganizationService]
 })
 export class OrganizationsModule {}

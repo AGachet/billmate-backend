@@ -2,7 +2,7 @@
  * Resources
  */
 import { ApiProperty } from '@nestjs/swagger'
-import { ArrayNotEmpty, IsArray, IsUUID } from 'class-validator'
+import { IsArray, Matches } from 'class-validator'
 
 /**
  * Declaration
@@ -10,11 +10,10 @@ import { ArrayNotEmpty, IsArray, IsUUID } from 'class-validator'
 export class UpdateAccountUsersDto {
   @ApiProperty({
     description: 'List of user IDs to associate with the account',
-    example: ['3fa85f64-5717-4562-b3fc-2c963f66afa6', '3fa85f64-5717-4562-b3fc-2c963f66afa7'],
+    example: ['cmagp5dy70001t84nzb9t39j6', 'cmagp5dy70001t84nzb9t39j7'],
     type: [String]
   })
   @IsArray()
-  @ArrayNotEmpty()
-  @IsUUID('4', { each: true })
+  @Matches(/^c[a-z0-9]{20,}$/, { each: true, message: 'each value in userIds must be a valid CUID' })
   userIds: string[]
 }
