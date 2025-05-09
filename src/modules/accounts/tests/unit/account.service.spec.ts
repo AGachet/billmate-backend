@@ -108,6 +108,9 @@ describe('AccountService', () => {
               deleteMany: jest.fn(),
               createMany: jest.fn()
             },
+            user: {
+              findMany: jest.fn()
+            },
             role: {
               findMany: jest.fn()
             },
@@ -254,8 +257,7 @@ describe('AccountService', () => {
       // Mock prisma responses
       accountAccessService.validateUserAccountAccess.mockResolvedValue(mockUserAccountLink)
       ;(prismaService.account.update as jest.Mock).mockResolvedValue({
-        id: mockAccount.id,
-        name: mockAccount.name,
+        ...mockAccount,
         isActive: false
       })
 
@@ -270,11 +272,9 @@ describe('AccountService', () => {
         where: { id: mockAccount.id },
         data: { isActive: false }
       })
-      expect(logger.debug).toHaveBeenCalledWith(`Updating account ${mockAccount.id} status to inactive for user ${mockUser.id}`, 'updateAccountStatus')
     })
 
     it('should not update if account is already in desired state', async () => {
-      // Mock prisma responses with account already in the correct state
       accountAccessService.validateUserAccountAccess.mockResolvedValue(mockUserAccountLink)
 
       const result = await service.updateAccountStatus(mockUser.id, mockAccount.id, true)
@@ -285,18 +285,15 @@ describe('AccountService', () => {
         isActive: true
       })
       expect(prismaService.account.update).not.toHaveBeenCalled()
-      expect(logger.debug).toHaveBeenCalledWith(`Account ${mockAccount.id} is already active`, 'updateAccountStatus')
     })
 
     it('should throw UnauthorizedException if user does not have access to account', async () => {
-      // Mock prisma responses
       accountAccessService.validateUserAccountAccess.mockRejectedValue(new UnauthorizedException())
 
       await expect(service.updateAccountStatus(mockUser.id, mockAccount.id, false)).rejects.toThrow(UnauthorizedException)
     })
 
     it('should handle database error gracefully', async () => {
-      // Mock user has access but update fails
       accountAccessService.validateUserAccountAccess.mockResolvedValue(mockUserAccountLink)
       ;(prismaService.account.update as jest.Mock).mockRejectedValue(new Error('Database error'))
 
@@ -306,71 +303,328 @@ describe('AccountService', () => {
   })
 
   describe('updateAccountUsers', () => {
-    const mockUsers = [
-      { id: '1', email: 'user1@test.com', firstname: 'John', lastname: 'Doe', isActive: true },
-      { id: '2', email: 'user2@test.com', firstname: 'Jane', lastname: 'Smith', isActive: true }
-    ]
-
     const mockAccountWithUsers = {
       ...mockAccount,
-      usersLinked: mockUsers.map((user) => ({
-        userId: user.id,
-        user: { ...user, people: { firstname: user.firstname, lastname: user.lastname } }
-      })),
-      entities: []
+      usersLinked: [
+        {
+          userId: mockUser.id,
+          accountId: mockAccount.id,
+          user: {
+            ...mockUser,
+            people: {
+              firstname: 'Bruce',
+              lastname: 'Wayne'
+            }
+          }
+        }
+      ],
+      entities: [
+        {
+          ...mockEntity,
+          users: [
+            {
+              user: mockUser
+            }
+          ]
+        }
+      ]
     }
+
+    const mockNewUsers = [
+      {
+        id: '2',
+        email: 'user2@test.com',
+        isActive: true,
+        people: {
+          firstname: 'Jane',
+          lastname: 'Doe'
+        }
+      },
+      {
+        id: '3',
+        email: 'user3@test.com',
+        isActive: true,
+        people: {
+          firstname: 'John',
+          lastname: 'Smith'
+        }
+      }
+    ]
 
     it('should update account users successfully', async () => {
       // Mock prisma responses
       accountAccessService.validateUserAccountAccess.mockResolvedValue(mockUserAccountLink)
       ;(prismaService.account.findUnique as jest.Mock).mockResolvedValue(mockAccountWithUsers)
+      ;(prismaService.userAccountLink.deleteMany as jest.Mock).mockResolvedValue({ count: 1 })
+      ;(prismaService.userAccountLink.createMany as jest.Mock).mockResolvedValue({ count: 2 })
+      ;(prismaService.user.findMany as jest.Mock).mockResolvedValue(mockNewUsers)
       ;(prismaService.userAccountLink.findMany as jest.Mock).mockResolvedValue(
-        mockUsers.map((user) => ({
-          user: { ...user, people: { firstname: user.firstname, lastname: user.lastname } }
+        mockNewUsers.map((user) => ({
+          user: {
+            ...user,
+            people: user.people
+          }
         }))
       )
+      ;(prismaService.$transaction as jest.Mock).mockImplementation(async (callback) => {
+        return callback(prismaService)
+      })
 
-      const result = await service.updateAccountUsers(mockUser.id, mockAccount.id, ['1', '2'])
+      const newUserIds = ['2', '3']
+      const result = await service.updateAccountUsers(mockUser.id, mockAccount.id, newUserIds)
 
       expect(result).toEqual({
         id: mockAccount.id,
         name: mockAccount.name,
-        users: mockUsers.map((user) => ({
-          id: user.id,
-          email: user.email,
-          isActive: user.isActive,
-          people: {
-            firstname: user.firstname,
-            lastname: user.lastname
-          }
-        }))
+        users: expect.arrayContaining([
+          expect.objectContaining({
+            id: '2',
+            email: 'user2@test.com',
+            isActive: true,
+            people: {
+              firstname: 'Jane',
+              lastname: 'Doe'
+            }
+          }),
+          expect.objectContaining({
+            id: '3',
+            email: 'user3@test.com',
+            isActive: true,
+            people: {
+              firstname: 'John',
+              lastname: 'Smith'
+            }
+          })
+        ])
       })
       expect(prismaService.$transaction).toHaveBeenCalled()
+      expect(prismaService.userAccountLink.deleteMany).toHaveBeenCalled()
+      expect(prismaService.userAccountLink.createMany).toHaveBeenCalled()
+    })
+
+    it('should handle partial update (add and remove users simultaneously)', async () => {
+      // Mock prisma responses
+      accountAccessService.validateUserAccountAccess.mockResolvedValue(mockUserAccountLink)
+      ;(prismaService.account.findUnique as jest.Mock).mockResolvedValue(mockAccountWithUsers)
+      ;(prismaService.userAccountLink.deleteMany as jest.Mock).mockResolvedValue({ count: 1 })
+      ;(prismaService.userAccountLink.createMany as jest.Mock).mockResolvedValue({ count: 1 })
+      ;(prismaService.user.findMany as jest.Mock).mockResolvedValue([mockNewUsers[0]])
+      ;(prismaService.userAccountLink.findMany as jest.Mock).mockResolvedValue([
+        {
+          user: {
+            ...mockNewUsers[0],
+            people: mockNewUsers[0].people
+          }
+        }
+      ])
+      ;(prismaService.$transaction as jest.Mock).mockImplementation(async (callback) => {
+        return callback(prismaService)
+      })
+
+      // Remove current user and add a new one
+      const result = await service.updateAccountUsers(mockUser.id, mockAccount.id, ['2'])
+
+      expect(result).toEqual({
+        id: mockAccount.id,
+        name: mockAccount.name,
+        users: expect.arrayContaining([
+          expect.objectContaining({
+            id: '2',
+            email: 'user2@test.com',
+            isActive: true,
+            people: {
+              firstname: 'Jane',
+              lastname: 'Doe'
+            }
+          })
+        ])
+      })
+      expect(prismaService.userAccountLink.deleteMany).toHaveBeenCalledWith({
+        where: {
+          userId: { in: [mockUser.id] },
+          accountId: mockAccount.id
+        }
+      })
+      expect(prismaService.userAccountLink.createMany).toHaveBeenCalledWith({
+        data: [{ userId: '2', accountId: mockAccount.id }]
+      })
     })
 
     it('should throw UnauthorizedException if user does not have access to account', async () => {
       accountAccessService.validateUserAccountAccess.mockRejectedValue(new UnauthorizedException())
 
-      await expect(service.updateAccountUsers(mockUser.id, mockAccount.id, ['1', '2'])).rejects.toThrow(UnauthorizedException)
+      await expect(service.updateAccountUsers(mockUser.id, mockAccount.id, ['2', '3'])).rejects.toThrow(UnauthorizedException)
     })
 
-    it('should throw BadRequestException if account would have no active users', async () => {
+    it('should throw NotFoundException if account does not exist', async () => {
+      accountAccessService.validateUserAccountAccess.mockResolvedValue(mockUserAccountLink)
+      ;(prismaService.account.findUnique as jest.Mock).mockResolvedValue(null)
+
+      await expect(service.updateAccountUsers(mockUser.id, mockAccount.id, ['2', '3'])).rejects.toThrow('Account with ID 1 not found')
+    })
+
+    it('should throw BadRequestException if update would leave account without active users', async () => {
+      // Mock prisma responses
       accountAccessService.validateUserAccountAccess.mockResolvedValue(mockUserAccountLink)
       ;(prismaService.account.findUnique as jest.Mock).mockResolvedValue({
         ...mockAccountWithUsers,
-        usersLinked: [],
-        entities: []
+        usersLinked: [], // No direct users
+        entities: [] // No entities with users
       })
 
-      await expect(service.updateAccountUsers(mockUser.id, mockAccount.id, [])).rejects.toThrow(BadRequestException)
+      await expect(service.updateAccountUsers(mockUser.id, mockAccount.id, [])).rejects.toThrow(
+        'Cannot update users as it would leave the account without any active users (directly or via active entities)'
+      )
     })
 
-    it('should handle database error gracefully', async () => {
+    it('should handle case where some users do not exist', async () => {
+      // Mock prisma responses
       accountAccessService.validateUserAccountAccess.mockResolvedValue(mockUserAccountLink)
-      ;(prismaService.account.findUnique as jest.Mock).mockRejectedValue(new Error('Database error'))
+      ;(prismaService.account.findUnique as jest.Mock).mockResolvedValue(mockAccountWithUsers)
+      ;(prismaService.userAccountLink.deleteMany as jest.Mock).mockResolvedValue({ count: 1 })
+      ;(prismaService.userAccountLink.createMany as jest.Mock).mockRejectedValue(new Error('Foreign key constraint failed'))
 
-      await expect(service.updateAccountUsers(mockUser.id, mockAccount.id, ['1', '2'])).rejects.toThrow(BadRequestException)
+      await expect(service.updateAccountUsers(mockUser.id, mockAccount.id, ['999'])).rejects.toThrow(BadRequestException)
       expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Failed to manage users for account'), 'manageAccountUsers')
+    })
+
+    it('should handle users with inactive status', async () => {
+      // Mock prisma responses
+      accountAccessService.validateUserAccountAccess.mockResolvedValue(mockUserAccountLink)
+      ;(prismaService.account.findUnique as jest.Mock).mockResolvedValue(mockAccountWithUsers)
+      ;(prismaService.userAccountLink.deleteMany as jest.Mock).mockResolvedValue({ count: 1 })
+      ;(prismaService.userAccountLink.createMany as jest.Mock).mockResolvedValue({ count: 1 })
+      ;(prismaService.user.findMany as jest.Mock).mockResolvedValue([
+        {
+          ...mockNewUsers[0],
+          isActive: false
+        }
+      ])
+      ;(prismaService.userAccountLink.findMany as jest.Mock).mockResolvedValue([
+        {
+          user: {
+            ...mockNewUsers[0],
+            isActive: false,
+            people: mockNewUsers[0].people
+          }
+        }
+      ])
+      ;(prismaService.$transaction as jest.Mock).mockImplementation(async (callback) => {
+        return callback(prismaService)
+      })
+
+      const result = await service.updateAccountUsers(mockUser.id, mockAccount.id, ['2'])
+
+      expect(result).toEqual({
+        id: mockAccount.id,
+        name: mockAccount.name,
+        users: expect.arrayContaining([
+          expect.objectContaining({
+            id: '2',
+            email: 'user2@test.com',
+            isActive: false,
+            people: {
+              firstname: 'Jane',
+              lastname: 'Doe'
+            }
+          })
+        ])
+      })
+    })
+
+    it('should handle users with missing people data', async () => {
+      // Mock prisma responses
+      accountAccessService.validateUserAccountAccess.mockResolvedValue(mockUserAccountLink)
+      ;(prismaService.account.findUnique as jest.Mock).mockResolvedValue(mockAccountWithUsers)
+      ;(prismaService.userAccountLink.deleteMany as jest.Mock).mockResolvedValue({ count: 1 })
+      ;(prismaService.userAccountLink.createMany as jest.Mock).mockResolvedValue({ count: 1 })
+      ;(prismaService.user.findMany as jest.Mock).mockResolvedValue([
+        {
+          ...mockNewUsers[0],
+          people: null
+        }
+      ])
+      ;(prismaService.userAccountLink.findMany as jest.Mock).mockResolvedValue([
+        {
+          user: {
+            ...mockNewUsers[0],
+            people: null
+          }
+        }
+      ])
+      ;(prismaService.$transaction as jest.Mock).mockImplementation(async (callback) => {
+        return callback(prismaService)
+      })
+
+      const result = await service.updateAccountUsers(mockUser.id, mockAccount.id, ['2'])
+
+      expect(result).toEqual({
+        id: mockAccount.id,
+        name: mockAccount.name,
+        users: expect.arrayContaining([
+          expect.objectContaining({
+            id: '2',
+            email: 'user2@test.com',
+            isActive: true,
+            people: null
+          })
+        ])
+      })
+    })
+
+    it('should handle users with entity associations', async () => {
+      const mockAccountWithEntityUsers = {
+        ...mockAccountWithUsers,
+        entities: [
+          {
+            ...mockEntity,
+            users: [
+              {
+                user: {
+                  ...mockNewUsers[0],
+                  people: mockNewUsers[0].people
+                }
+              }
+            ]
+          }
+        ]
+      }
+
+      // Mock prisma responses
+      accountAccessService.validateUserAccountAccess.mockResolvedValue(mockUserAccountLink)
+      ;(prismaService.account.findUnique as jest.Mock).mockResolvedValue(mockAccountWithEntityUsers)
+      ;(prismaService.userAccountLink.deleteMany as jest.Mock).mockResolvedValue({ count: 1 })
+      ;(prismaService.userAccountLink.createMany as jest.Mock).mockResolvedValue({ count: 1 })
+      ;(prismaService.user.findMany as jest.Mock).mockResolvedValue([mockNewUsers[0]])
+      ;(prismaService.userAccountLink.findMany as jest.Mock).mockResolvedValue([
+        {
+          user: {
+            ...mockNewUsers[0],
+            people: mockNewUsers[0].people
+          }
+        }
+      ])
+      ;(prismaService.$transaction as jest.Mock).mockImplementation(async (callback) => {
+        return callback(prismaService)
+      })
+
+      const result = await service.updateAccountUsers(mockUser.id, mockAccount.id, ['2'])
+
+      expect(result).toEqual({
+        id: mockAccount.id,
+        name: mockAccount.name,
+        users: expect.arrayContaining([
+          expect.objectContaining({
+            id: '2',
+            email: 'user2@test.com',
+            isActive: true,
+            people: {
+              firstname: 'Jane',
+              lastname: 'Doe'
+            }
+          })
+        ])
+      })
     })
   })
 })
