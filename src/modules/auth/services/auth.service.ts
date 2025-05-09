@@ -295,7 +295,7 @@ export class AuthService {
 
     if (!tokenRecord) {
       this.logger.warn(`Invalid or expired reset password token for ${payload.email}`, 'resetPassword')
-      throw new BadRequestException('Invalid or expired reset password token')
+      throw new NotFoundException('Invalid or expired reset password token')
     }
 
     // Check if user has access to password reset
@@ -374,6 +374,7 @@ export class AuthService {
       })
 
       if (!user) {
+        this.logger.warn(`User not found: ${userId}`, 'getMe')
         throw new NotFoundException('User not found')
       }
 
@@ -433,6 +434,9 @@ export class AuthService {
     } catch (error) {
       this.logger.error(`Failed to get user information for ${userId}: ${error.message}`, 'getMe')
       if (error instanceof NotFoundException) {
+        throw error
+      }
+      if (error instanceof BadRequestException) {
         throw error
       }
       throw new BadRequestException('Failed to get user information')
@@ -545,7 +549,7 @@ export class AuthService {
 
     if (!tokenRecord) {
       this.logger.warn(`Invalid confirmation token for ${email}`, 'activateUserAccount')
-      throw new BadRequestException('Invalid confirmation token')
+      throw new NotFoundException('Invalid confirmation token')
     }
 
     // Create People record
