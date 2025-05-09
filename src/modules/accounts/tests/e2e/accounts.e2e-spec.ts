@@ -10,6 +10,7 @@ import request from 'supertest'
 /**
  * Dependencies
  */
+import { AccountAccessModule } from '@common/services/account-access/account-access.module'
 import { LoggerModule } from '@common/services/logger/logger.module'
 import { EnvModule } from '@configs/env/env.module'
 import { PrismaModule } from '@configs/prisma/prisma.module'
@@ -50,7 +51,7 @@ describe('Accounts Module (e2e)', () => {
   beforeAll(async () => {
     // Create NestJS application
     const moduleRef: TestingModule = await Test.createTestingModule({
-      imports: [AccountsModule, AuthModule, LoggerModule, EnvModule, PrismaModule]
+      imports: [AccountsModule, AuthModule, LoggerModule, EnvModule, PrismaModule, AccountAccessModule]
     }).compile()
 
     app = moduleRef.createNestApplication()

@@ -1,7 +1,7 @@
 /**
  * Resources
  */
-import { BadRequestException, UnauthorizedException } from '@nestjs/common'
+import { BadRequestException, NotFoundException, UnauthorizedException } from '@nestjs/common'
 import { JwtService } from '@nestjs/jwt'
 import { Test, TestingModule } from '@nestjs/testing'
 import * as bcrypt from 'bcrypt'
@@ -73,44 +73,6 @@ const mockTokenRecord = {
       }
     ]
   }
-}
-
-const mockUserWithRoles = {
-  ...mockUser,
-  rolesLinked: [
-    {
-      role: {
-        name: 'USER',
-        isActive: true,
-        modulesLinked: [
-          {
-            module: {
-              name: 'USER_ACCOUNT',
-              isActive: true
-            }
-          }
-        ],
-        permissionsLinked: [
-          {
-            permission: {
-              name: 'READ_OWN_PROFILE',
-              module: {
-                isActive: true
-              }
-            }
-          }
-        ]
-      }
-    }
-  ],
-  accountsLinked: [
-    {
-      role: 'ADMIN',
-      account: mockAccount,
-      createdAt: new Date(),
-      updatedAt: new Date()
-    }
-  ]
 }
 
 const mockJwtService = {
@@ -510,7 +472,7 @@ describe('AuthService', () => {
     it('should return user information successfully', async () => {
       // Mock user avec la structure exacte attendue par le service
       const mockUserWithPersonAndRoles = {
-        ...mockUserWithRoles,
+        ...mockUser,
         people: {
           id: '2',
           firstname: 'Bruce',
@@ -518,14 +480,49 @@ describe('AuthService', () => {
           email: 'batman@diamondforge.fr',
           createdAt: new Date(),
           updatedAt: new Date()
-        }
+        },
+        rolesLinked: [
+          {
+            role: {
+              name: 'USER',
+              modulesLinked: [
+                {
+                  module: {
+                    name: 'USER_ACCOUNT',
+                    isActive: true
+                  }
+                }
+              ],
+              permissionsLinked: [
+                {
+                  permission: {
+                    name: 'READ_OWN_PROFILE',
+                    module: {
+                      isActive: true
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        accountsLinked: [
+          {
+            account: {
+              id: mockAccount.id,
+              name: mockAccount.name,
+              description: mockAccount.description,
+              isActive: mockAccount.isActive
+            }
+          }
+        ],
+        entitiesLinked: []
       }
 
       ;(prismaService.user.findUnique as jest.Mock).mockResolvedValue(mockUserWithPersonAndRoles)
 
       const result = await service.getMe(mockUser.id)
 
-      // check that all properties, including firstname and lastname, have the expected values
       expect(result).toEqual({
         userId: mockUser.id,
         email: mockUser.email,
@@ -542,16 +539,17 @@ describe('AuthService', () => {
             isActive: mockAccount.isActive
           }
         ],
+        entities: [],
         createdAt: mockUser.createdAt
       })
 
       expect(logger.debug).toHaveBeenCalledWith('Getting user information for 1', 'getMe')
     })
 
-    it('should throw BadRequestException if user not found', async () => {
+    it('should throw NotFoundException if user not found', async () => {
       ;(prismaService.user.findUnique as jest.Mock).mockResolvedValue(null)
 
-      await expect(service.getMe('non-existent-id')).rejects.toThrow(BadRequestException)
+      await expect(service.getMe('non-existent-id')).rejects.toThrow(NotFoundException)
       expect(logger.warn).toHaveBeenCalledWith('User not found: non-existent-id', 'getMe')
     })
   })
