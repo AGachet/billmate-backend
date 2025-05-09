@@ -10,14 +10,23 @@ import * as bcrypt from 'bcrypt'
 export interface TestAccountsSetup {
   /** User used for testing */
   userId: string
+  /** Second user for testing */
+  user2: {
+    id: string
+    email: string
+  }
   /** First account for testing */
   account1: {
     id: string
+    name: string
+    description: string
     isActive: boolean
   }
   /** Second account for testing */
   account2: {
     id: string
+    name: string
+    description: string
     isActive: boolean
   }
 }
@@ -109,14 +118,49 @@ export async function setupTestAccounts(prisma: PrismaService): Promise<TestAcco
         }
       })
 
+      // Create second test user
+      const people2 = await prisma.people.create({
+        data: {
+          firstname: 'Test',
+          lastname: 'User',
+          email: 'testuser@billmate.test'
+        }
+      })
+
+      const hashedPassword2 = await bcrypt.hash('TestPassword123', 10)
+      const user2 = await prisma.user.create({
+        data: {
+          email: 'testuser@billmate.test',
+          password: hashedPassword2,
+          isActive: true,
+          peopleId: people2.id,
+          preference: {
+            create: {
+              locale: 'FR'
+            }
+          },
+          rolesLinked: {
+            create: [{ roleId: userRole.id }]
+          }
+        }
+      })
+
       return {
         userId: newUser.id,
+        user2: {
+          id: user2.id,
+          email: user2.email
+        },
         account1: {
           id: account1.id,
+          name: account1.name || 'Test Account 1',
+          description: account1.description || 'Account for testing status updates',
           isActive: account1.isActive
         },
         account2: {
           id: account2.id,
+          name: account2.name || 'Test Account 2',
+          description: account2.description || 'Account for testing status updates',
           isActive: account2.isActive
         }
       }
@@ -136,12 +180,20 @@ export async function setupTestAccounts(prisma: PrismaService): Promise<TestAcco
 
     return {
       userId: accountManager.id,
+      user2: {
+        id: accountManager.id, // Reuse the same user for simplicity in existing setup
+        email: accountManager.email
+      },
       account1: {
         id: account1.id,
+        name: account1.name || 'Test Account 1',
+        description: account1.description || 'Account for testing status updates',
         isActive: account1.isActive
       },
       account2: {
         id: account2.id,
+        name: account2.name || 'Test Account 2',
+        description: account2.description || 'Account for testing status updates',
         isActive: account2.isActive
       }
     }
