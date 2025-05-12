@@ -1,7 +1,6 @@
 /**
  * Resources
  */
-import { Test, TestingModule } from '@nestjs/testing'
 import { Locale } from '@prisma/client'
 
 /**
@@ -10,16 +9,20 @@ import { Locale } from '@prisma/client'
 import { TranslationService } from '@modules/email/services/translation.service'
 
 /**
- * Test
+ * Test utilities and mocks
+ */
+import { clearAllMocks, createTestingModule } from '@common/tests/unit/utils/test-utils'
+
+/**
+ * Test suite
  */
 describe('TranslationService', () => {
   let service: TranslationService
 
   beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [TranslationService]
-    }).compile()
+    clearAllMocks()
 
+    const module = await createTestingModule([TranslationService])
     service = module.get<TranslationService>(TranslationService)
   })
 
@@ -28,59 +31,88 @@ describe('TranslationService', () => {
   })
 
   describe('getTranslation', () => {
-    it('should return English translations when locale is EN', () => {
-      const result = service.getTranslation(Locale.EN, 'accountConfirmation')
-      expect(result).toBeDefined()
-      expect(result.subject).toBeDefined()
-      expect(result.title).toBeDefined()
-      expect(result.body).toBeDefined()
-      expect(result.button).toBeDefined()
-      expect(result.fallback).toBeDefined()
-      expect(result.ignore).toBeDefined()
-      expect(result.footer).toBeDefined()
+    describe('for English locale', () => {
+      it('should return English translations when locale is EN', () => {
+        // Act
+        const result = service.getTranslation(Locale.EN, 'accountConfirmation')
+
+        // Assert
+        expect(result).toBeDefined()
+        expect(result.subject).toBeDefined()
+        expect(result.title).toBeDefined()
+        expect(result.body).toBeDefined()
+        expect(result.button).toBeDefined()
+        expect(result.fallback).toBeDefined()
+        expect(result.ignore).toBeDefined()
+        expect(result.footer).toBeDefined()
+        expect(result.greeting).toBeDefined()
+      })
     })
 
-    it('should return French translations when locale is FR', () => {
-      const result = service.getTranslation(Locale.FR, 'accountConfirmation')
-      expect(result).toBeDefined()
-      expect(result.subject).toBeDefined()
-      expect(result.title).toBeDefined()
-      expect(result.body).toBeDefined()
-      expect(result.button).toBeDefined()
-      expect(result.fallback).toBeDefined()
-      expect(result.ignore).toBeDefined()
-      expect(result.footer).toBeDefined()
+    describe('for French locale', () => {
+      it('should return French translations when locale is FR', () => {
+        // Act
+        const result = service.getTranslation(Locale.FR, 'accountConfirmation')
+
+        // Assert
+        expect(result).toBeDefined()
+        expect(result.subject).toBeDefined()
+        expect(result.title).toBeDefined()
+        expect(result.body).toBeDefined()
+        expect(result.button).toBeDefined()
+        expect(result.fallback).toBeDefined()
+        expect(result.ignore).toBeDefined()
+        expect(result.footer).toBeDefined()
+        expect(result.greeting).toBeDefined()
+      })
     })
 
-    it('should return English translations as fallback for unknown locale', () => {
-      const result = service.getTranslation('unknown' as Locale, 'accountConfirmation')
-      expect(result).toBeDefined()
-      expect(result.subject).toBeDefined()
-      expect(result.title).toBeDefined()
-      expect(result.body).toBeDefined()
-      expect(result.button).toBeDefined()
-      expect(result.fallback).toBeDefined()
-      expect(result.ignore).toBeDefined()
-      expect(result.footer).toBeDefined()
+    describe('for unknown locale', () => {
+      it('should return English translations as fallback for unknown locale', () => {
+        // Act
+        const result = service.getTranslation('unknown' as Locale, 'accountConfirmation')
+
+        // Assert
+        expect(result).toBeDefined()
+        expect(result.subject).toBeDefined()
+        expect(result.title).toBeDefined()
+        expect(result.body).toBeDefined()
+        expect(result.button).toBeDefined()
+        expect(result.fallback).toBeDefined()
+        expect(result.ignore).toBeDefined()
+        expect(result.footer).toBeDefined()
+        expect(result.greeting).toBeDefined()
+      })
     })
 
-    it('should return password reset template with expiration field', () => {
-      const result = service.getTranslation(Locale.EN, 'passwordReset')
-      expect(result).toBeDefined()
-      expect(result.subject).toBeDefined()
-      expect(result.title).toBeDefined()
-      expect(result.body).toBeDefined()
-      expect(result.button).toBeDefined()
-      expect(result.fallback).toBeDefined()
-      expect(result.ignore).toBeDefined()
-      expect(result.footer).toBeDefined()
-      expect(result.expiration).toBeDefined()
+    describe('password reset template', () => {
+      it('should return password reset template with expiration field', () => {
+        // Act
+        const result = service.getTranslation(Locale.EN, 'passwordReset')
+
+        // Assert
+        expect(result).toBeDefined()
+        expect(result.subject).toBeDefined()
+        expect(result.title).toBeDefined()
+        expect(result.body).toBeDefined()
+        expect(result.button).toBeDefined()
+        expect(result.fallback).toBeDefined()
+        expect(result.ignore).toBeDefined()
+        expect(result.footer).toBeDefined()
+        expect(result.expiration).toBeDefined()
+        expect(result.greeting).toBeDefined()
+      })
     })
 
-    it('should return undefined for invalid translation key', () => {
-      // @ts-expect-error - Testing invalid key
-      const result = service.getTranslation(Locale.EN, 'invalidKey')
-      expect(result).toBeUndefined()
+    describe('error handling', () => {
+      it('should return undefined for invalid translation key', () => {
+        // Act
+        // @ts-expect-error - Testing invalid key
+        const result = service.getTranslation(Locale.EN, 'invalidKey')
+
+        // Assert
+        expect(result).toBeUndefined()
+      })
     })
   })
 })
