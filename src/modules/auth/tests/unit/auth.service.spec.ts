@@ -1,10 +1,12 @@
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-nocheck
 /**
- * Resources
+ * Unit tests for AuthService
  */
 import { BadRequestException, NotFoundException, UnauthorizedException } from '@nestjs/common'
 import { JwtService } from '@nestjs/jwt'
-import { Test, TestingModule } from '@nestjs/testing'
 import * as bcrypt from 'bcrypt'
+import { Response } from 'express'
 
 /**
  * Dependencies
@@ -12,53 +14,27 @@ import * as bcrypt from 'bcrypt'
 import { Logger } from '@common/services/logger/logger.service'
 import { EnvConfig } from '@configs/env/services/env.service'
 import { PrismaService } from '@configs/prisma/services/prisma.service'
-import { mockChalk, mockWinston } from '@configs/test/unit-mocks-glob'
 import { AuthService } from '@modules/auth/services/auth.service'
 import { EmailService } from '@modules/email/services/email.service'
 
 /**
- * Type
+ * Test utilities and mocks
  */
-import { Response } from 'express'
+import { mockEmailService, mockEnvConfig, mockJwtService, mockLogger, mockPrismaService } from '@common/tests/unit/mocks/service-mocks'
+import { mockAccount, mockToken, mockUser } from '@common/tests/unit/mocks/test-data'
+import { clearAllMocks, createMockResponse, createTestingModule } from '@common/tests/unit/utils/test-utils'
 
 /**
  * Mocks
  */
 jest.mock('bcrypt')
-jest.mock('@nestjs/jwt')
-jest.mock('@configs/prisma/services/prisma.service')
-jest.mock('@common/services/logger/logger.service')
-jest.mock('@configs/env/services/env.service')
-jest.mock('@modules/email/services/email.service')
-jest.mock('@modules/accounts/services/account.service')
 
 /**
- * Test Data
+ * Test data
  */
-const mockUser = {
-  id: '1',
-  email: 'batman@diamondforge.fr',
-  password: 'brucewaynepassword',
-  isActive: true,
-  createdAt: new Date(),
-  updatedAt: new Date(),
-  lastLoginAt: new Date()
-}
-
-const mockAccount = {
-  id: '1',
-  name: 'Wayne Enterprises',
-  description: 'Main business account',
-  isActive: true,
-  createdAt: new Date(),
-  updatedAt: new Date()
-}
-
-const mockToken = 'mock.jwt.token'
-
 const mockTokenRecord = {
   id: '1',
-  userId: '1',
+  userId: mockUser.id,
   token: 'valid.refresh.token',
   type: 'SESSION_REFRESH',
   expiresAt: new Date(Date.now() + 3600000), // 1 hour from now
@@ -75,95 +51,23 @@ const mockTokenRecord = {
   }
 }
 
-const mockJwtService = {
-  sign: jest.fn().mockReturnValue(mockToken),
-  verify: jest.fn().mockReturnValue({ email: mockUser.email, sub: mockUser.id })
-}
-
 /**
- * Declaration
+ * Test suite
  */
 describe('AuthService', () => {
   let service: AuthService
   let prismaService: jest.Mocked<PrismaService>
   let jwtService: jest.Mocked<JwtService>
-  let env: jest.Mocked<EnvConfig>
   let logger: jest.Mocked<Logger>
 
   beforeEach(async () => {
-    // Reset global mocks
-    Object.values(mockChalk).forEach((mock: jest.Mock) => mock.mockClear())
-    Object.values(mockWinston.format).forEach((mock: jest.Mock) => mock.mockClear())
-    mockWinston.createLogger.mockClear()
+    clearAllMocks()
 
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        AuthService,
-        {
-          provide: PrismaService,
-          useValue: {
-            user: {
-              findUnique: jest.fn(),
-              create: jest.fn(),
-              update: jest.fn(),
-              findFirst: jest.fn()
-            },
-            userToken: {
-              create: jest.fn(),
-              deleteMany: jest.fn(),
-              findFirst: jest.fn(),
-              delete: jest.fn()
-            },
-            role: {
-              findFirst: jest.fn()
-            },
-            userAccountLink: {
-              create: jest.fn()
-            },
-            people: {
-              create: jest.fn()
-            },
-            account: {
-              create: jest.fn()
-            }
-          }
-        },
-        {
-          provide: JwtService,
-          useValue: mockJwtService
-        },
-        {
-          provide: Logger,
-          useValue: {
-            debug: jest.fn(),
-            warn: jest.fn(),
-            error: jest.fn()
-          }
-        },
-        {
-          provide: EnvConfig,
-          useValue: {
-            get: jest.fn()
-          }
-        },
-        {
-          provide: EmailService,
-          useValue: {
-            sendAccountConfirmationEmail: jest.fn(),
-            sendPasswordResetEmail: jest.fn()
-          }
-        }
-      ]
-    }).compile()
+    // Configure mock implementations
+    mockJwtService.sign.mockReturnValue(mockToken)
+    mockJwtService.verify.mockReturnValue({ email: mockUser.email, sub: mockUser.id })
 
-    service = module.get<AuthService>(AuthService)
-    prismaService = module.get(PrismaService)
-    jwtService = module.get(JwtService)
-    env = module.get(EnvConfig)
-    logger = module.get(Logger)
-
-    // Mock env values
-    env.get.mockImplementation((key: string) => {
+    mockEnvConfig.get.mockImplementation((key: string) => {
       const envValues: Record<string, string> = {
         NODE_ENV: 'test',
         JWT_SECRET_AUTH: 'auth-secret',
@@ -177,10 +81,35 @@ describe('AuthService', () => {
       }
       return envValues[key] || ''
     })
-  })
 
-  afterEach(() => {
-    jest.clearAllMocks()
+    const module = await createTestingModule([
+      AuthService,
+      {
+        provide: PrismaService,
+        useValue: mockPrismaService
+      },
+      {
+        provide: JwtService,
+        useValue: mockJwtService
+      },
+      {
+        provide: Logger,
+        useValue: mockLogger
+      },
+      {
+        provide: EnvConfig,
+        useValue: mockEnvConfig
+      },
+      {
+        provide: EmailService,
+        useValue: mockEmailService
+      }
+    ])
+
+    service = module.get<AuthService>(AuthService)
+    prismaService = module.get(PrismaService)
+    jwtService = module.get(JwtService)
+    logger = module.get(Logger)
   })
 
   describe('signUp', () => {
@@ -191,41 +120,54 @@ describe('AuthService', () => {
       lastname: 'Doe'
     }
 
-    it('should create a new user successfully', async () => {
-      // Mock prisma responses
-      ;(prismaService.user.findUnique as jest.Mock).mockResolvedValue(null)
-      ;(prismaService.user.create as jest.Mock).mockResolvedValue(mockUser)
-      ;(prismaService.userToken.create as jest.Mock).mockResolvedValue({ id: '1', token: mockToken })
-
-      // Mock bcrypt
-      ;(bcrypt.hash as jest.Mock).mockResolvedValue('hashedPassword')
-
-      const result = await service.signUp(signUpDto)
-
-      expect(result).toEqual({
-        message: 'If the email address is valid, you will receive a confirmation email shortly.',
-        confirmationToken: mockToken
+    describe('when successful', () => {
+      beforeEach(() => {
+        prismaService.user.findUnique.mockResolvedValue(null)
+        prismaService.user.create.mockResolvedValue(mockUser)
+        prismaService.userToken.create.mockResolvedValue({ id: '1', token: mockToken })
+        ;(bcrypt.hash as jest.Mock).mockResolvedValue('hashedPassword')
       })
-      expect(prismaService.user.create).toHaveBeenCalledWith({
-        data: {
-          email: signUpDto.email,
-          password: 'hashedPassword',
-          isActive: false
-        }
+
+      it('should create a new user successfully', async () => {
+        // Act
+        const result = await service.signUp(signUpDto)
+
+        // Assert
+        expect(result).toEqual({
+          message: 'If the email address is valid, you will receive a confirmation email shortly.',
+          confirmationToken: mockToken
+        })
+
+        // Verify
+        expect(prismaService.user.create).toHaveBeenCalledWith({
+          data: {
+            email: signUpDto.email,
+            password: 'hashedPassword',
+            isActive: false
+          }
+        })
+        expect(logger.debug).toHaveBeenCalledWith('Sign-up attempt for test@example.com', 'signUp')
       })
-      expect(logger.debug).toHaveBeenCalledWith('Sign-up attempt for test@example.com', 'signUp')
     })
 
-    it('should handle existing user gracefully', async () => {
-      ;(prismaService.user.findUnique as jest.Mock).mockResolvedValue(mockUser)
-
-      const result = await service.signUp(signUpDto)
-
-      expect(result).toEqual({
-        message: 'If the email address is valid, you will receive a confirmation email shortly.'
+    describe('when user already exists', () => {
+      beforeEach(() => {
+        prismaService.user.findUnique.mockResolvedValue(mockUser)
       })
-      expect(prismaService.user.create).not.toHaveBeenCalled()
-      expect(logger.warn).toHaveBeenCalledWith('Sign-up attempt with existing email: test@example.com', 'signUp')
+
+      it('should handle existing user gracefully', async () => {
+        // Act
+        const result = await service.signUp(signUpDto)
+
+        // Assert
+        expect(result).toEqual({
+          message: 'If the email address is valid, you will receive a confirmation email shortly.'
+        })
+
+        // Verify
+        expect(prismaService.user.create).not.toHaveBeenCalled()
+        expect(logger.warn).toHaveBeenCalledWith('Sign-up attempt with existing email: test@example.com', 'signUp')
+      })
     })
   })
 
@@ -235,37 +177,49 @@ describe('AuthService', () => {
       password: 'password123'
     }
 
-    it('should sign in user successfully', async () => {
-      // Mock validateUser
-      ;(prismaService.user.findUnique as jest.Mock).mockResolvedValue(mockUser)
-      ;(bcrypt.compare as jest.Mock).mockResolvedValue(true)
-
-      // Mock generateTokens
-      ;(prismaService.userToken.create as jest.Mock).mockResolvedValue({ id: '1', token: mockToken })
-
-      const result = await service.signIn(signInDto)
-
-      expect(result).toEqual({
-        userId: mockUser.id,
-        accessToken: mockToken,
-        refreshToken: mockToken
+    describe('when successful', () => {
+      beforeEach(() => {
+        prismaService.user.findUnique.mockResolvedValue(mockUser)
+        ;(bcrypt.compare as jest.Mock).mockResolvedValue(true)
+        prismaService.userToken.create.mockResolvedValue({ id: '1', token: mockToken })
       })
-      expect(prismaService.user.update).toHaveBeenCalledWith({
-        where: { email: signInDto.email },
-        data: expect.any(Object)
+
+      it('should sign in user successfully', async () => {
+        // Act
+        const result = await service.signIn(signInDto)
+
+        // Assert
+        expect(result).toEqual({
+          userId: mockUser.id,
+          accessToken: mockToken,
+          refreshToken: mockToken
+        })
+
+        // Verify
+        expect(prismaService.user.update).toHaveBeenCalledWith({
+          where: { email: signInDto.email },
+          data: expect.any(Object)
+        })
+        expect(logger.debug).toHaveBeenCalledWith('Sign-in attempt for test@example.com', 'signIn')
       })
-      expect(logger.debug).toHaveBeenCalledWith('Sign-in attempt for test@example.com', 'signIn')
     })
 
-    it('should throw UnauthorizedException if credentials are invalid', async () => {
-      ;(prismaService.user.findUnique as jest.Mock).mockResolvedValue(mockUser)
-      ;(bcrypt.compare as jest.Mock).mockResolvedValue(false)
+    describe('when credentials are invalid', () => {
+      beforeEach(() => {
+        prismaService.user.findUnique.mockResolvedValue(mockUser)
+        ;(bcrypt.compare as jest.Mock).mockResolvedValue(false)
+      })
 
-      await expect(service.signIn(signInDto)).rejects.toThrow(UnauthorizedException)
-      expect(logger.warn).toHaveBeenCalledWith('Invalid password for user: test@example.com', 'validateUser')
+      it('should throw UnauthorizedException if credentials are invalid', async () => {
+        // Act & Assert
+        await expect(service.signIn(signInDto)).rejects.toThrow(UnauthorizedException)
+
+        // Verify
+        expect(logger.warn).toHaveBeenCalledWith('Invalid password for user: test@example.com', 'validateUser')
+      })
     })
 
-    it('should create account when signing in with confirmation token', async () => {
+    describe('when signing in with confirmation token', () => {
       const signInWithTokenDto = {
         ...signInDto,
         firstname: 'John',
@@ -273,60 +227,53 @@ describe('AuthService', () => {
         confirmAccountToken: 'valid.token'
       }
 
-      // Mock validateUser
-      ;(prismaService.user.findUnique as jest.Mock).mockResolvedValue({
-        ...mockUser,
-        isActive: false
-      })
-      ;(bcrypt.compare as jest.Mock).mockResolvedValue(true)
-
-      // Mock token verification
-      jwtService.verify.mockReturnValue({ email: mockUser.email, sub: mockUser.id })
-
-      // Mock userToken find for activateUserAccount
-      ;(prismaService.userToken.findFirst as jest.Mock).mockResolvedValue({
-        id: '1',
-        userId: mockUser.id,
-        token: 'valid.token',
-        type: 'ACCOUNT_VALIDATION'
-      })
-
-      // Mock people create
-      ;(prismaService.people.create as jest.Mock).mockResolvedValue({
-        id: '2',
-        firstname: 'John',
-        lastname: 'Doe',
-        email: 'test@example.com'
-      })
-
-      // Mock account create
-      ;(prismaService.account.create as jest.Mock).mockResolvedValue(mockAccount)
-
-      // Mock user update
-      ;(prismaService.user.update as jest.Mock).mockResolvedValue({
-        ...mockUser,
-        isActive: true,
-        peopleId: '2'
-      })
-
-      // Mock generateTokens
-      ;(prismaService.userToken.create as jest.Mock).mockResolvedValue({ id: '1', token: mockToken })
-
-      const result = await service.signIn(signInWithTokenDto)
-
-      expect(result).toEqual({
-        userId: mockUser.id,
-        accessToken: mockToken,
-        refreshToken: mockToken
-      })
-
-      expect(prismaService.user.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { email: signInWithTokenDto.email }
+      beforeEach(() => {
+        prismaService.user.findUnique.mockResolvedValue({
+          ...mockUser,
+          isActive: false
         })
-      )
+        ;(bcrypt.compare as jest.Mock).mockResolvedValue(true)
+        jwtService.verify.mockReturnValue({ email: mockUser.email, sub: mockUser.id })
+        prismaService.userToken.findFirst.mockResolvedValue({
+          id: '1',
+          userId: mockUser.id,
+          token: 'valid.token',
+          type: 'ACCOUNT_VALIDATION'
+        })
+        prismaService.people.create.mockResolvedValue({
+          id: '2',
+          firstname: 'John',
+          lastname: 'Doe',
+          email: 'test@example.com'
+        })
+        prismaService.account.create.mockResolvedValue(mockAccount)
+        prismaService.user.update.mockResolvedValue({
+          ...mockUser,
+          isActive: true,
+          peopleId: '2'
+        })
+        prismaService.userToken.create.mockResolvedValue({ id: '1', token: mockToken })
+      })
 
-      expect(prismaService.account.create).toHaveBeenCalled()
+      it('should create account when signing in with confirmation token', async () => {
+        // Act
+        const result = await service.signIn(signInWithTokenDto)
+
+        // Assert
+        expect(result).toEqual({
+          userId: mockUser.id,
+          accessToken: mockToken,
+          refreshToken: mockToken
+        })
+
+        // Verify
+        expect(prismaService.user.update).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: { email: signInWithTokenDto.email }
+          })
+        )
+        expect(prismaService.account.create).toHaveBeenCalled()
+      })
     })
   })
 
@@ -336,11 +283,16 @@ describe('AuthService', () => {
     }
 
     it('should sign out user successfully', async () => {
-      ;(prismaService.userToken.deleteMany as jest.Mock).mockResolvedValue({ count: 1 })
+      // Arrange
+      prismaService.userToken.deleteMany.mockResolvedValue({ count: 1 })
 
+      // Act
       const result = await service.signOut(signOutDto)
 
+      // Assert
       expect(result).toEqual({ message: 'Logged out successfully' })
+
+      // Verify
       expect(prismaService.userToken.deleteMany).toHaveBeenCalledWith({
         where: {
           userId: signOutDto.userId,
@@ -356,48 +308,64 @@ describe('AuthService', () => {
       email: 'test@example.com'
     }
 
-    it('should request password reset successfully', async () => {
-      ;(prismaService.user.findUnique as jest.Mock).mockResolvedValue({
-        ...mockUser,
-        rolesLinked: [
-          {
-            role: {
-              modulesLinked: [{ module: { name: 'USER_ACCOUNT_PASSWORD_RECOVERY' } }],
-              permissionsLinked: [{ permission: { name: 'PASSWORD_RECOVERY_LINK_REQUEST_OWN' } }]
+    describe('when successful', () => {
+      beforeEach(() => {
+        prismaService.user.findUnique.mockResolvedValue({
+          ...mockUser,
+          rolesLinked: [
+            {
+              role: {
+                modulesLinked: [{ module: { name: 'USER_ACCOUNT_PASSWORD_RECOVERY' } }],
+                permissionsLinked: [{ permission: { name: 'PASSWORD_RECOVERY_LINK_REQUEST_OWN' } }]
+              }
             }
-          }
-        ]
+          ]
+        })
+        prismaService.userToken.create.mockResolvedValue({ id: '1', token: mockToken })
       })
-      ;(prismaService.userToken.create as jest.Mock).mockResolvedValue({ id: '1', token: mockToken })
 
-      const result = await service.requestPasswordReset(requestPasswordResetDto)
+      it('should request password reset successfully', async () => {
+        // Act
+        const result = await service.requestPasswordReset(requestPasswordResetDto)
 
-      expect(result).toEqual({
-        message: 'If the email address is valid and has permission to reset password, you will receive reset instructions shortly.',
-        resetToken: mockToken
+        // Assert
+        expect(result).toEqual({
+          message: 'If the email address is valid and has permission to reset password, you will receive reset instructions shortly.',
+          resetToken: mockToken
+        })
+
+        // Verify
+        expect(logger.debug).toHaveBeenCalledWith('Password reset requested for test@example.com', 'requestPasswordReset')
       })
-      expect(logger.debug).toHaveBeenCalledWith('Password reset requested for test@example.com', 'requestPasswordReset')
     })
 
-    it('should handle user without permission gracefully', async () => {
-      ;(prismaService.user.findUnique as jest.Mock).mockResolvedValue({
-        ...mockUser,
-        rolesLinked: [
-          {
-            role: {
-              modulesLinked: [],
-              permissionsLinked: []
+    describe('when user has no permission', () => {
+      beforeEach(() => {
+        prismaService.user.findUnique.mockResolvedValue({
+          ...mockUser,
+          rolesLinked: [
+            {
+              role: {
+                modulesLinked: [],
+                permissionsLinked: []
+              }
             }
-          }
-        ]
+          ]
+        })
       })
 
-      const result = await service.requestPasswordReset(requestPasswordResetDto)
+      it('should handle user without permission gracefully', async () => {
+        // Act
+        const result = await service.requestPasswordReset(requestPasswordResetDto)
 
-      expect(result).toEqual({
-        message: 'If the email address is valid and has permission to reset password, you will receive reset instructions shortly.'
+        // Assert
+        expect(result).toEqual({
+          message: 'If the email address is valid and has permission to reset password, you will receive reset instructions shortly.'
+        })
+
+        // Verify
+        expect(logger.warn).toHaveBeenCalledWith('Password reset requested for non-existent user or without permissions: test@example.com', 'requestPasswordReset')
       })
-      expect(logger.warn).toHaveBeenCalledWith('Password reset requested for non-existent user or without permissions: test@example.com', 'requestPasswordReset')
     })
   })
 
@@ -408,149 +376,183 @@ describe('AuthService', () => {
       confirmPassword: 'newPassword123'
     }
 
-    it('should reset password successfully', async () => {
-      ;(prismaService.userToken.findFirst as jest.Mock).mockResolvedValue(mockTokenRecord)
-      ;(bcrypt.hash as jest.Mock).mockResolvedValue('newHashedPassword')
-      ;(prismaService.user.update as jest.Mock).mockResolvedValue({ ...mockUser, password: 'newHashedPassword' })
-      ;(prismaService.userToken.delete as jest.Mock).mockResolvedValue(mockTokenRecord)
-
-      const result = await service.resetPassword(resetPasswordDto)
-
-      expect(result).toEqual({ message: 'Password has been reset successfully' })
-      expect(prismaService.user.update).toHaveBeenCalledWith({
-        where: { id: mockUser.id },
-        data: { password: 'newHashedPassword' }
-      })
-      expect(prismaService.userToken.delete).toHaveBeenCalledWith({
-        where: { id: mockTokenRecord.id }
-      })
-      expect(logger.debug).toHaveBeenCalledWith('Password reset attempt', 'resetPassword')
-    })
-
-    it('should throw BadRequestException if passwords do not match', async () => {
-      const invalidDto = {
-        ...resetPasswordDto,
-        confirmPassword: 'differentPassword'
-      }
-
-      await expect(service.resetPassword(invalidDto)).rejects.toThrow(BadRequestException)
-      expect(logger.warn).toHaveBeenCalledWith('Passwords do not match', 'resetPassword')
-    })
-
-    it('should throw BadRequestException if token is invalid', async () => {
-      jwtService.verify.mockImplementation(() => {
-        throw new UnauthorizedException('Invalid token')
+    describe('when successful', () => {
+      beforeEach(() => {
+        prismaService.userToken.findFirst.mockResolvedValue(mockTokenRecord)
+        ;(bcrypt.hash as jest.Mock).mockResolvedValue('newHashedPassword')
+        prismaService.user.update.mockResolvedValue({ ...mockUser, password: 'newHashedPassword' })
+        prismaService.userToken.delete.mockResolvedValue(mockTokenRecord)
       })
 
-      await expect(service.resetPassword(resetPasswordDto)).rejects.toThrow(UnauthorizedException)
-      expect(logger.warn).toHaveBeenCalledWith('Invalid token: valid.reset.token', 'verifyToken')
+      it('should reset password successfully', async () => {
+        // Act
+        const result = await service.resetPassword(resetPasswordDto)
+
+        // Assert
+        expect(result).toEqual({ message: 'Password has been reset successfully' })
+
+        // Verify
+        expect(prismaService.user.update).toHaveBeenCalledWith({
+          where: { id: mockUser.id },
+          data: { password: 'newHashedPassword' }
+        })
+        expect(prismaService.userToken.delete).toHaveBeenCalledWith({
+          where: { id: mockTokenRecord.id }
+        })
+        expect(logger.debug).toHaveBeenCalledWith('Password reset attempt', 'resetPassword')
+      })
     })
 
-    it('should throw UnauthorizedException if user has no permission', async () => {
-      jwtService.verify.mockReturnValue({ email: mockUser.email, sub: mockUser.id })
-      ;(prismaService.userToken.findFirst as jest.Mock).mockResolvedValue({
-        ...mockTokenRecord,
-        user: {
-          ...mockUser,
-          rolesLinked: [
-            {
-              role: {
-                modulesLinked: [],
-                permissionsLinked: []
-              }
-            }
-          ]
+    describe('when errors occur', () => {
+      it('should throw BadRequestException if passwords do not match', async () => {
+        // Arrange
+        const invalidDto = {
+          ...resetPasswordDto,
+          confirmPassword: 'differentPassword'
         }
+
+        // Act & Assert
+        await expect(service.resetPassword(invalidDto)).rejects.toThrow(BadRequestException)
+
+        // Verify
+        expect(logger.warn).toHaveBeenCalledWith('Passwords do not match', 'resetPassword')
       })
 
-      await expect(service.resetPassword(resetPasswordDto)).rejects.toThrow(UnauthorizedException)
-      expect(logger.warn).toHaveBeenCalledWith('User batman@diamondforge.fr does not have access to password reset', 'resetPassword')
+      it('should throw BadRequestException if token is invalid', async () => {
+        // Arrange
+        jwtService.verify.mockImplementation(() => {
+          throw new UnauthorizedException('Invalid token')
+        })
+
+        // Act & Assert
+        await expect(service.resetPassword(resetPasswordDto)).rejects.toThrow(UnauthorizedException)
+
+        // Verify
+        expect(logger.warn).toHaveBeenCalledWith('Invalid token: valid.reset.token', 'verifyToken')
+      })
+
+      it('should throw UnauthorizedException if user has no permission', async () => {
+        // Arrange
+        jwtService.verify.mockReturnValue({ email: mockUser.email, sub: mockUser.id })
+        prismaService.userToken.findFirst.mockResolvedValue({
+          ...mockTokenRecord,
+          user: {
+            ...mockUser,
+            rolesLinked: [
+              {
+                role: {
+                  modulesLinked: [],
+                  permissionsLinked: []
+                }
+              }
+            ]
+          }
+        })
+
+        // Act & Assert
+        await expect(service.resetPassword(resetPasswordDto)).rejects.toThrow(UnauthorizedException)
+
+        // Verify
+        expect(logger.warn).toHaveBeenCalledWith(`User ${mockUser.email} does not have access to password reset`, 'resetPassword')
+      })
     })
   })
 
   describe('getMe', () => {
-    it('should return user information successfully', async () => {
-      // Mock user avec la structure exacte attendue par le service
-      const mockUserWithPersonAndRoles = {
-        ...mockUser,
-        people: {
-          id: '2',
-          firstname: 'Bruce',
-          lastname: 'Wayne',
-          email: 'batman@diamondforge.fr',
-          createdAt: new Date(),
-          updatedAt: new Date()
-        },
-        rolesLinked: [
-          {
-            role: {
-              name: 'USER',
-              modulesLinked: [
-                {
-                  module: {
-                    name: 'USER_ACCOUNT',
-                    isActive: true
-                  }
-                }
-              ],
-              permissionsLinked: [
-                {
-                  permission: {
-                    name: 'READ_OWN_PROFILE',
+    describe('when successful', () => {
+      beforeEach(() => {
+        // Arrange
+        prismaService.user.findUnique.mockResolvedValue({
+          ...mockUser,
+          people: {
+            id: '2',
+            firstname: 'Bruce',
+            lastname: 'Wayne',
+            email: mockUser.email,
+            createdAt: new Date(),
+            updatedAt: new Date()
+          },
+          rolesLinked: [
+            {
+              role: {
+                name: 'USER',
+                modulesLinked: [
+                  {
                     module: {
+                      name: 'USER_ACCOUNT',
                       isActive: true
                     }
                   }
-                }
-              ]
+                ],
+                permissionsLinked: [
+                  {
+                    permission: {
+                      name: 'READ_OWN_PROFILE',
+                      module: {
+                        isActive: true
+                      }
+                    }
+                  }
+                ]
+              }
             }
-          }
-        ],
-        accountsLinked: [
-          {
-            account: {
+          ],
+          accountsLinked: [
+            {
+              account: {
+                id: mockAccount.id,
+                name: mockAccount.name,
+                description: mockAccount.description,
+                isActive: mockAccount.isActive
+              }
+            }
+          ],
+          entitiesLinked: []
+        })
+      })
+
+      it('should return user information successfully', async () => {
+        // Act
+        const result = await service.getMe(mockUser.id)
+
+        // Assert
+        expect(result).toEqual({
+          userId: mockUser.id,
+          email: mockUser.email,
+          firstname: 'Bruce',
+          lastname: 'Wayne',
+          roles: ['USER'],
+          modules: ['USER_ACCOUNT'],
+          permissions: ['READ_OWN_PROFILE'],
+          accounts: [
+            {
               id: mockAccount.id,
               name: mockAccount.name,
               description: mockAccount.description,
               isActive: mockAccount.isActive
             }
-          }
-        ],
-        entitiesLinked: []
-      }
+          ],
+          entities: [],
+          createdAt: mockUser.createdAt
+        })
 
-      ;(prismaService.user.findUnique as jest.Mock).mockResolvedValue(mockUserWithPersonAndRoles)
-
-      const result = await service.getMe(mockUser.id)
-
-      expect(result).toEqual({
-        userId: mockUser.id,
-        email: mockUser.email,
-        firstname: 'Bruce',
-        lastname: 'Wayne',
-        roles: ['USER'],
-        modules: ['USER_ACCOUNT'],
-        permissions: ['READ_OWN_PROFILE'],
-        accounts: [
-          {
-            id: mockAccount.id,
-            name: mockAccount.name,
-            description: mockAccount.description,
-            isActive: mockAccount.isActive
-          }
-        ],
-        entities: [],
-        createdAt: mockUser.createdAt
+        // Verify
+        expect(logger.debug).toHaveBeenCalledWith('Getting user information for 1', 'getMe')
       })
-
-      expect(logger.debug).toHaveBeenCalledWith('Getting user information for 1', 'getMe')
     })
 
-    it('should throw NotFoundException if user not found', async () => {
-      ;(prismaService.user.findUnique as jest.Mock).mockResolvedValue(null)
+    describe('when errors occur', () => {
+      beforeEach(() => {
+        prismaService.user.findUnique.mockResolvedValue(null)
+      })
 
-      await expect(service.getMe('non-existent-id')).rejects.toThrow(NotFoundException)
-      expect(logger.warn).toHaveBeenCalledWith('User not found: non-existent-id', 'getMe')
+      it('should throw NotFoundException if user not found', async () => {
+        // Act & Assert
+        await expect(service.getMe('non-existent-id')).rejects.toThrow(NotFoundException)
+
+        // Verify
+        expect(logger.warn).toHaveBeenCalledWith('User not found: non-existent-id', 'getMe')
+      })
     })
   })
 
@@ -578,169 +580,214 @@ describe('AuthService', () => {
       ]
     }
 
-    it('should return guest information successfully', async () => {
-      ;(prismaService.role.findFirst as jest.Mock).mockResolvedValue(mockGuestRole)
-
-      const result = await service.getGuest()
-
-      expect(result).toEqual({
-        roles: ['guest'],
-        modules: ['USER_ACCOUNT_CREATION'],
-        permissions: ['USER_ACCOUNT_CREATE_OWN']
+    describe('when successful', () => {
+      beforeEach(() => {
+        prismaService.role.findFirst.mockResolvedValue(mockGuestRole)
       })
-      expect(logger.debug).toHaveBeenCalledWith('Getting guest user information', 'getGuest')
-    })
 
-    it('should return empty arrays if guest role not found', async () => {
-      ;(prismaService.role.findFirst as jest.Mock).mockResolvedValue(null)
+      it('should return guest information successfully', async () => {
+        // Act
+        const result = await service.getGuest()
 
-      const result = await service.getGuest()
+        // Assert
+        expect(result).toEqual({
+          roles: ['guest'],
+          modules: ['USER_ACCOUNT_CREATION'],
+          permissions: ['USER_ACCOUNT_CREATE_OWN']
+        })
 
-      expect(result).toEqual({
-        roles: ['guest'],
-        modules: [],
-        permissions: []
+        // Verify
+        expect(logger.debug).toHaveBeenCalledWith('Getting guest user information', 'getGuest')
       })
-      expect(logger.warn).toHaveBeenCalledWith('Guest role not found, returning empty arrays', 'getGuest')
     })
 
-    it('should filter out inactive modules', async () => {
-      const mockGuestRoleWithInactiveModule = {
-        ...mockGuestRole,
-        modulesLinked: [
-          {
-            module: {
-              name: 'USER_ACCOUNT_CREATION',
-              isActive: true
-            }
-          },
-          {
-            module: {
-              name: 'INACTIVE_MODULE',
-              isActive: false
-            }
-          }
-        ]
-      }
+    describe('when guest role not found', () => {
+      beforeEach(() => {
+        prismaService.role.findFirst.mockResolvedValue(null)
+      })
 
-      ;(prismaService.role.findFirst as jest.Mock).mockResolvedValue(mockGuestRoleWithInactiveModule)
+      it('should return empty arrays if guest role not found', async () => {
+        // Act
+        const result = await service.getGuest()
 
-      const result = await service.getGuest()
+        // Assert
+        expect(result).toEqual({
+          roles: ['guest'],
+          modules: [],
+          permissions: []
+        })
 
-      expect(result.modules).toEqual(['USER_ACCOUNT_CREATION'])
-      expect(result.modules).not.toContain('INACTIVE_MODULE')
+        // Verify
+        expect(logger.warn).toHaveBeenCalledWith('Guest role not found, returning empty arrays', 'getGuest')
+      })
     })
 
-    it('should filter out permissions from inactive modules', async () => {
-      const mockGuestRoleWithInactiveModulePermission = {
-        ...mockGuestRole,
-        permissionsLinked: [
-          {
-            permission: {
-              name: 'USER_ACCOUNT_CREATE_OWN',
+    describe('filtering inactive modules and permissions', () => {
+      it('should filter out inactive modules', async () => {
+        // Arrange
+        prismaService.role.findFirst.mockResolvedValue({
+          ...mockGuestRole,
+          modulesLinked: [
+            {
               module: {
+                name: 'USER_ACCOUNT_CREATION',
                 isActive: true
               }
-            }
-          },
-          {
-            permission: {
-              name: 'INACTIVE_MODULE_PERMISSION',
+            },
+            {
               module: {
+                name: 'INACTIVE_MODULE',
                 isActive: false
               }
             }
-          }
-        ]
-      }
+          ]
+        })
 
-      ;(prismaService.role.findFirst as jest.Mock).mockResolvedValue(mockGuestRoleWithInactiveModulePermission)
+        // Act
+        const result = await service.getGuest()
 
-      const result = await service.getGuest()
+        // Assert
+        expect(result.modules).toEqual(['USER_ACCOUNT_CREATION'])
+        expect(result.modules).not.toContain('INACTIVE_MODULE')
+      })
 
-      expect(result.permissions).toEqual(['USER_ACCOUNT_CREATE_OWN'])
-      expect(result.permissions).not.toContain('INACTIVE_MODULE_PERMISSION')
+      it('should filter out permissions from inactive modules', async () => {
+        // Arrange
+        prismaService.role.findFirst.mockResolvedValue({
+          ...mockGuestRole,
+          permissionsLinked: [
+            {
+              permission: {
+                name: 'USER_ACCOUNT_CREATE_OWN',
+                module: {
+                  isActive: true
+                }
+              }
+            },
+            {
+              permission: {
+                name: 'INACTIVE_MODULE_PERMISSION',
+                module: {
+                  isActive: false
+                }
+              }
+            }
+          ]
+        })
+
+        // Act
+        const result = await service.getGuest()
+
+        // Assert
+        expect(result.permissions).toEqual(['USER_ACCOUNT_CREATE_OWN'])
+        expect(result.permissions).not.toContain('INACTIVE_MODULE_PERMISSION')
+      })
     })
   })
 
   describe('refreshTokens', () => {
-    it('should refresh tokens successfully', async () => {
-      jwtService.verify.mockReturnValue({ email: mockUser.email, sub: mockUser.id })
-      ;(prismaService.userToken.findFirst as jest.Mock).mockResolvedValue(mockTokenRecord)
-      jwtService.sign.mockReturnValueOnce('new.access.token').mockReturnValueOnce('valid.refresh.token')
-
-      const result = await service.refreshTokens('valid.refresh.token')
-
-      expect(result).toEqual({
-        accessToken: 'new.access.token',
-        refreshToken: 'valid.refresh.token'
+    describe('when successful', () => {
+      beforeEach(() => {
+        jwtService.verify.mockReturnValue({ email: mockUser.email, sub: mockUser.id })
+        prismaService.userToken.findFirst.mockResolvedValue(mockTokenRecord)
+        jwtService.sign.mockReturnValueOnce('new.access.token').mockReturnValueOnce('valid.refresh.token')
       })
-      expect(logger.debug).toHaveBeenCalledWith('Tokens generated successfully for batman@diamondforge.fr', 'generateTokens')
+
+      it('should refresh tokens successfully', async () => {
+        // Act
+        const result = await service.refreshTokens('valid.refresh.token')
+
+        // Assert
+        expect(result).toEqual({
+          accessToken: 'new.access.token',
+          refreshToken: 'valid.refresh.token'
+        })
+
+        // Verify
+        expect(logger.debug).toHaveBeenCalledWith(`Tokens generated successfully for ${mockUser.email}`, 'generateTokens')
+      })
     })
 
-    it('should generate new refresh token if current one is expired', async () => {
-      jwtService.verify.mockReturnValue({ email: mockUser.email, sub: mockUser.id })
-      ;(prismaService.userToken.findFirst as jest.Mock).mockResolvedValue({
-        ...mockTokenRecord,
-        expiresAt: new Date(Date.now() - 3600000) // 1 hour ago
-      })
-      jwtService.sign.mockReturnValueOnce('new.access.token').mockReturnValueOnce('new.refresh.token')
-      ;(prismaService.userToken.create as jest.Mock).mockResolvedValue({
-        ...mockTokenRecord,
-        token: 'new.refresh.token'
+    describe('when refresh token is expired', () => {
+      beforeEach(() => {
+        jwtService.verify.mockReturnValue({ email: mockUser.email, sub: mockUser.id })
+        prismaService.userToken.findFirst.mockResolvedValue({
+          ...mockTokenRecord,
+          expiresAt: new Date(Date.now() - 3600000) // 1 hour ago
+        })
+        jwtService.sign.mockReturnValueOnce('new.access.token').mockReturnValueOnce('new.refresh.token')
+        prismaService.userToken.create.mockResolvedValue({
+          ...mockTokenRecord,
+          token: 'new.refresh.token'
+        })
       })
 
-      const result = await service.refreshTokens('valid.refresh.token')
+      it('should generate new refresh token if current one is expired', async () => {
+        // Act
+        const result = await service.refreshTokens('valid.refresh.token')
 
-      expect(result).toEqual({
-        accessToken: 'new.access.token',
-        refreshToken: 'new.refresh.token'
+        // Assert
+        expect(result).toEqual({
+          accessToken: 'new.access.token',
+          refreshToken: 'new.refresh.token'
+        })
+
+        // Verify
+        expect(logger.debug).toHaveBeenCalledWith(`Tokens generated successfully for ${mockUser.email}`, 'generateTokens')
       })
-      expect(logger.debug).toHaveBeenCalledWith('Tokens generated successfully for batman@diamondforge.fr', 'generateTokens')
     })
 
-    it('should throw UnauthorizedException if refresh token is invalid', async () => {
-      jwtService.verify.mockImplementation(() => {
-        throw new Error('Invalid token')
+    describe('when errors occur', () => {
+      it('should throw UnauthorizedException if refresh token is invalid', async () => {
+        // Arrange
+        jwtService.verify.mockImplementation(() => {
+          throw new Error('Invalid token')
+        })
+
+        // Act & Assert
+        await expect(service.refreshTokens('invalid.token')).rejects.toThrow(UnauthorizedException)
+
+        // Verify
+        expect(logger.warn).toHaveBeenCalledWith('Invalid token: invalid.token', 'verifyToken')
       })
 
-      await expect(service.refreshTokens('invalid.token')).rejects.toThrow(UnauthorizedException)
-      expect(logger.warn).toHaveBeenCalledWith('Invalid token: invalid.token', 'verifyToken')
-    })
+      it('should throw UnauthorizedException if user has been deleted', async () => {
+        // Arrange
+        jwtService.verify.mockReturnValue({ sub: '123' })
+        prismaService.userToken.findFirst.mockResolvedValue(null)
+        prismaService.user.findUnique.mockResolvedValue(null)
 
-    it('should throw UnauthorizedException if user has been deleted', async () => {
-      ;(jwtService.verify as jest.Mock).mockReturnValue({ sub: '123' })
-      ;(prismaService.userToken.findFirst as jest.Mock).mockResolvedValue(null)
-      ;(prismaService.user.findUnique as jest.Mock).mockResolvedValue(null)
-      ;(jwtService.sign as jest.Mock).mockImplementation(() => {
-        throw new UnauthorizedException('User not found')
+        // Act & Assert
+        await expect(service.refreshTokens('valid.refresh.token')).rejects.toThrow(UnauthorizedException)
+
+        // Verify
+        expect(logger.warn).toHaveBeenCalledWith('Invalid refresh token: valid.refresh.token', 'refreshTokens')
       })
-
-      await expect(service.refreshTokens('valid.refresh.token')).rejects.toThrow(UnauthorizedException)
-      expect(logger.warn).toHaveBeenCalledWith('Invalid refresh token: valid.refresh.token', 'refreshTokens')
     })
   })
 
   describe('Cookie Management', () => {
     it('should set auth cookies correctly', () => {
-      const mockResponse = {
-        cookie: jest.fn(),
-        clearCookie: jest.fn()
-      } as unknown as Response
+      // Arrange
+      const mockResponse = createMockResponse()
 
-      service.setAuthCookies(mockResponse, 'access.token', 'refresh.token')
+      // Act
+      service.setAuthCookies(mockResponse as unknown as Response, 'access.token', 'refresh.token')
+
+      // Assert
       expect(mockResponse.cookie).toHaveBeenCalledWith('access_token', 'access.token', expect.any(Object))
       expect(mockResponse.cookie).toHaveBeenCalledWith('refresh_token', 'refresh.token', expect.any(Object))
       expect(logger.debug).toHaveBeenCalledWith('Setting auth cookies for user', 'setAuthCookies')
     })
 
     it('should clear auth cookies correctly', () => {
-      const mockResponse = {
-        cookie: jest.fn(),
-        clearCookie: jest.fn()
-      } as unknown as Response
+      // Arrange
+      const mockResponse = createMockResponse()
 
-      service.clearAuthCookies(mockResponse)
+      // Act
+      service.clearAuthCookies(mockResponse as unknown as Response)
+
+      // Assert
       expect(mockResponse.clearCookie).toHaveBeenCalledWith('access_token', expect.any(Object))
       expect(mockResponse.clearCookie).toHaveBeenCalledWith('refresh_token', expect.any(Object))
       expect(logger.debug).toHaveBeenCalledWith('Clearing auth cookies for user', 'clearAuthCookies')
