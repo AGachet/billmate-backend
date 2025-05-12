@@ -12,6 +12,7 @@ import request from 'supertest'
  */
 import { AccountAccessModule } from '@common/services/account-access/account-access.module'
 import { LoggerModule } from '@common/services/logger/logger.module'
+import { cleanupTestUser } from '@common/tests/e2e/utils/setup-test-user'
 import { EnvModule } from '@configs/env/env.module'
 import { PrismaModule } from '@configs/prisma/prisma.module'
 import { PrismaService } from '@configs/prisma/services/prisma.service'
@@ -35,14 +36,14 @@ jest.mock('@common/services/logger/logger.service', () => ({
 }))
 
 /**
- * Declaration
+ * Test Suite
  */
 describe('Auth Module (e2e)', () => {
   let app: INestApplication
   let prismaService: PrismaService
   let agent: ReturnType<typeof request.agent>
 
-  // Test user data
+  // Test user data - only for authentication tests
   const testUser = {
     email: 'batman@diamondforge.fr',
     password: 'brucewaynepassword',
@@ -75,17 +76,8 @@ describe('Auth Module (e2e)', () => {
   })
 
   afterAll(async () => {
-    // Clean up database after tests
-    const user = await prismaService.user.findUnique({
-      where: { email: testUser.email }
-    })
-
-    if (user) {
-      // Delete user (all related records will be deleted automatically)
-      await prismaService.user.delete({
-        where: { id: user.id }
-      })
-    }
+    // Clean up test user with the common utility
+    await cleanupTestUser(prismaService, testUser.email)
 
     await prismaService.$disconnect()
     await app.close()
