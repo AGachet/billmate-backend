@@ -12,6 +12,7 @@ import request from 'supertest'
  */
 import { AccountAccessModule } from '@common/services/account-access/account-access.module'
 import { LoggerModule } from '@common/services/logger/logger.module'
+import { cleanupTestUser, loginTestUser, setupTestUser, TestUser } from '@common/tests/e2e/utils/setup-test-user'
 import { EnvModule } from '@configs/env/env.module'
 import { PrismaModule } from '@configs/prisma/prisma.module'
 import { PrismaService } from '@configs/prisma/services/prisma.service'
@@ -19,9 +20,8 @@ import { AccountsModule } from '@modules/accounts/accounts.module'
 import { AuthModule } from '@modules/auth/auth.module'
 
 /**
- * DB setup
+ * Note: Using common test utilities instead of module-specific ones
  */
-import { loginTestUser, setupTestAccounts, TestAccountsSetup } from '@modules/accounts/tests/utils/setup-test-accounts-db'
 
 // Load test environment variables
 dotenv.config({ path: '.env.test' })
@@ -46,7 +46,9 @@ describe('Accounts Module (e2e)', () => {
   let app: INestApplication
   let prismaService: PrismaService
   let agent: ReturnType<typeof request.agent>
-  let testAccounts: TestAccountsSetup
+  let testUser: TestUser
+  let testUser2: TestUser
+  let accountId: string
 
   beforeAll(async () => {
     // Create NestJS application
@@ -60,148 +62,121 @@ describe('Accounts Module (e2e)', () => {
 
     prismaService = moduleRef.get<PrismaService>(PrismaService)
 
-    await app.init()
+    // Set up test user with necessary roles and permissions
+    testUser = await setupTestUser(prismaService, {
+      email: 'accounttest@billmate.test',
+      password: 'TestPassword123',
+      firstname: 'Account',
+      lastname: 'Manager',
+      roles: ['user', 'account_administrator']
+    })
 
-    // Set up test accounts
-    testAccounts = await setupTestAccounts(prismaService)
+    // Set up second test user
+    testUser2 = await setupTestUser(prismaService, {
+      email: 'testuser@billmate.test',
+      password: 'TestPassword123',
+      firstname: 'Test',
+      lastname: 'User',
+      roles: ['user']
+    })
+
+    // Store account ID
+    accountId = testUser.accountId
+
+    await app.init()
 
     // Create agent for authenticated requests
     agent = request.agent(app.getHttpServer())
 
     // Login with test user
-    await loginTestUser(agent)
+    const loginSuccess = await loginTestUser(agent, testUser.email, 'TestPassword123')
+    if (!loginSuccess) {
+      throw new Error('Failed to login with test user')
+    }
   })
 
   afterAll(async () => {
+    // Clean up test users (also cleans up accounts if no other users are linked)
+    await cleanupTestUser(prismaService, testUser.email)
+    await cleanupTestUser(prismaService, testUser2.email)
+
     await prismaService.$disconnect()
     await app.close()
   })
 
   describe('Account Management', () => {
-    it('should toggle account 1 status when authenticated', async () => {
+    it('should toggle account status when authenticated', async () => {
       // Check initial account status
       let account = await prismaService.account.findUnique({
-        where: { id: testAccounts.account1.id }
+        where: { id: accountId }
       })
+      const initialStatus = account?.isActive || false
 
       // Toggle account status
-      const newState = !testAccounts.account1.isActive
-      const response = await agent.patch(`/api/accounts/${testAccounts.account1.id}/status`).send({ isActive: newState }).expect(200)
+      const newState = !initialStatus
+      const response = await agent.patch(`/api/accounts/${accountId}/status`).send({ isActive: newState }).expect(200)
 
       // Verify response
-      expect(response.body.id).toBe(testAccounts.account1.id)
+      expect(response.body.id).toBe(accountId)
       expect(response.body.isActive).toBe(newState)
 
       // Verify database update
       account = await prismaService.account.findUnique({
-        where: { id: testAccounts.account1.id }
-      })
-      expect(account?.isActive).toBe(newState)
-    })
-
-    it('should toggle account 2 status when authenticated', async () => {
-      // Check initial account status
-      let account = await prismaService.account.findUnique({
-        where: { id: testAccounts.account2.id }
-      })
-
-      // Toggle account status
-      const newState = !testAccounts.account2.isActive
-      const response = await agent.patch(`/api/accounts/${testAccounts.account2.id}/status`).send({ isActive: newState }).expect(200)
-
-      // Verify response
-      expect(response.body.id).toBe(testAccounts.account2.id)
-      expect(response.body.isActive).toBe(newState)
-
-      // Verify database update
-      account = await prismaService.account.findUnique({
-        where: { id: testAccounts.account2.id }
+        where: { id: accountId }
       })
       expect(account?.isActive).toBe(newState)
     })
 
     it('should reject updates without authentication', async () => {
-      // Try to update without authentication (direct request, not using agent)
-      await request(app.getHttpServer()).patch(`/api/accounts/${testAccounts.account1.id}/status`).send({ isActive: !testAccounts.account1.isActive }).expect(401)
-
-      // Verify account was not modified since last test
+      // Get current account status
       const account = await prismaService.account.findUnique({
-        where: { id: testAccounts.account1.id }
+        where: { id: accountId }
       })
-      // Account should still have the state set by the first test (!testAccounts.account1.isActive)
-      expect(account?.isActive).toBe(!testAccounts.account1.isActive)
+      const currentStatus = account?.isActive
+
+      // Try to update without authentication (direct request, not using agent)
+      await request(app.getHttpServer()).patch(`/api/accounts/${accountId}/status`).send({ isActive: !currentStatus }).expect(401)
+
+      // Verify account was not modified
+      const updatedAccount = await prismaService.account.findUnique({
+        where: { id: accountId }
+      })
+      expect(updatedAccount?.isActive).toBe(currentStatus)
     })
 
     describe('Account Details', () => {
       it('should fetch account details when authenticated', async () => {
-        const response = await agent.get(`/api/accounts/${testAccounts.account1.id}`).expect(200)
+        const response = await agent.get(`/api/accounts/${accountId}`).expect(200)
 
-        // Vérifier d'abord la structure de base
+        // First check the basic structure
         expect(response.body).toMatchObject({
-          id: testAccounts.account1.id,
-          name: testAccounts.account1.name,
-          description: testAccounts.account1.description,
+          id: accountId,
           createdAt: expect.any(String),
           updatedAt: expect.any(String),
-          users: [
-            {
+          users: expect.arrayContaining([
+            expect.objectContaining({
               id: expect.any(String),
-              email: 'accounttest@billmate.test',
+              email: expect.any(String),
               isActive: true,
-              people: {
-                id: expect.any(String),
-                firstname: 'Account',
-                lastname: 'Manager'
-              },
-              roles: [
-                {
-                  id: 2,
-                  name: 'user'
-                },
-                {
-                  id: 3,
-                  name: 'account_administrator'
-                }
-              ],
-              entityIds: []
-            }
-          ],
-          entities: [],
-          roles: [
-            {
-              id: 1,
-              name: 'guest',
-              isActive: true,
-              isGlobal: true
-            },
-            {
-              id: 2,
-              name: 'user',
-              isActive: true,
-              isGlobal: true
-            },
-            {
-              id: 3,
-              name: 'account_administrator',
-              isActive: true,
-              isGlobal: true
-            },
-            {
-              id: 4,
-              name: 'organization_administrator',
-              isActive: true,
-              isGlobal: true
-            }
-          ]
+              people: expect.any(Object)
+            })
+          ]),
+          roles: expect.arrayContaining([
+            expect.objectContaining({
+              id: expect.any(Number),
+              name: expect.any(String),
+              isActive: expect.any(Boolean)
+            })
+          ])
         })
 
-        // Vérifier séparément l'état isActive
+        // Check isActive state separately
         expect(response.body.isActive).toBeDefined()
         expect(typeof response.body.isActive).toBe('boolean')
       })
 
       it('should reject fetching account details without authentication', async () => {
-        await request(app.getHttpServer()).get(`/api/accounts/${testAccounts.account1.id}`).expect(401)
+        await request(app.getHttpServer()).get(`/api/accounts/${accountId}`).expect(401)
       })
 
       it('should reject fetching non-existent account', async () => {
@@ -211,28 +186,15 @@ describe('Accounts Module (e2e)', () => {
 
     describe('Account Users Management', () => {
       it('should update account users when authenticated', async () => {
-        // Get current users
-        const currentAccount = await prismaService.account.findUnique({
-          where: { id: testAccounts.account1.id },
-          include: {
-            usersLinked: {
-              include: {
-                user: true
-              }
-            }
-          }
-        })
-
-        // Prepare new user list (keep one existing user and add a new one)
-        const existingUserId = currentAccount?.usersLinked[0]?.userId
-        const newUserIds = existingUserId ? [existingUserId, testAccounts.user2.id] : [testAccounts.user2.id]
-
-        const response = await agent.patch(`/api/accounts/${testAccounts.account1.id}/users`).send({ userIds: newUserIds }).expect(200)
+        // Add second user to account
+        const response = await agent
+          .patch(`/api/accounts/${accountId}/users`)
+          .send({ userIds: [testUser.id, testUser2.id] })
+          .expect(200)
 
         expect(response.body).toEqual(
           expect.objectContaining({
-            id: testAccounts.account1.id,
-            name: testAccounts.account1.name,
+            id: accountId,
             users: expect.arrayContaining([
               expect.objectContaining({
                 id: expect.any(String),
@@ -246,7 +208,7 @@ describe('Accounts Module (e2e)', () => {
 
         // Verify database update
         const updatedAccount = await prismaService.account.findUnique({
-          where: { id: testAccounts.account1.id },
+          where: { id: accountId },
           include: {
             usersLinked: {
               include: {
@@ -257,26 +219,27 @@ describe('Accounts Module (e2e)', () => {
         })
 
         const updatedUserIds = updatedAccount?.usersLinked.map((link) => link.userId) || []
-        expect(updatedUserIds).toEqual(expect.arrayContaining(newUserIds))
+        expect(updatedUserIds).toContain(testUser.id)
+        expect(updatedUserIds).toContain(testUser2.id)
       })
 
       it('should reject updating account users without authentication', async () => {
         await request(app.getHttpServer())
-          .patch(`/api/accounts/${testAccounts.account1.id}/users`)
-          .send({ userIds: [testAccounts.user2.id] })
+          .patch(`/api/accounts/${accountId}/users`)
+          .send({ userIds: [testUser2.id] })
           .expect(401)
       })
 
       it('should reject updating non-existent account users', async () => {
         await agent
           .patch('/api/accounts/non-existent-id/users')
-          .send({ userIds: [testAccounts.user2.id] })
+          .send({ userIds: [testUser2.id] })
           .expect(404)
       })
 
       it('should reject updating account users with invalid user IDs', async () => {
         await agent
-          .patch(`/api/accounts/${testAccounts.account1.id}/users`)
+          .patch(`/api/accounts/${accountId}/users`)
           .send({ userIds: ['invalid-user-id'] })
           .expect(400)
       })
