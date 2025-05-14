@@ -11,7 +11,7 @@ export const mockLogger = {
   log: jest.fn()
 }
 
-// Type générique pour les méthodes Prisma
+// Generic type for Prisma methods
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type PrismaClientMethod = (...args: any[]) => Promise<unknown>
 
@@ -95,10 +95,12 @@ export const mockEnvConfig = {
       JWT_SECRET_REFRESH: 'refresh-secret',
       JWT_SECRET_CONFIRM_ACCOUNT: 'confirm-secret',
       JWT_SECRET_RESET_PASSWORD: 'reset-secret',
+      JWT_SECRET_INVITATION: 'invitation-secret',
       JWT_AUTH_EXPIRES_IN: '1h',
       JWT_REFRESH_EXPIRES_IN: '7d',
       JWT_CREATE_ACCOUNT_EXPIRES_IN: '24h',
       JWT_RESET_PASSWORD_EXPIRES_IN: '1h',
+      JWT_INVITATION_EXPIRES_IN: '24h',
       FRONTEND_URL: 'http://localhost:3000'
     }
     return envValues[key] || ''
@@ -107,7 +109,55 @@ export const mockEnvConfig = {
 
 export const mockEmailService = {
   sendAccountConfirmationEmail: jest.fn(),
-  sendPasswordResetEmail: jest.fn()
+  sendPasswordResetEmail: jest.fn(),
+  sendInvitationEmail: jest.fn()
+}
+
+export const mockAuthService = {
+  createUniqueToken: jest.fn().mockResolvedValue({
+    id: '1',
+    token: 'mock.token',
+    type: 'INVITATION',
+    expiresAt: new Date(Date.now() + 86400000)
+  }),
+  generateAuthTokens: jest.fn().mockImplementation((userId) => {
+    if (!userId) {
+      throw new Error('User ID is required to generate auth tokens')
+    }
+    return Promise.resolve({
+      accessToken: 'mock.access.token',
+      refreshToken: 'mock.refresh.token'
+    })
+  }),
+  generateTokens: jest.fn().mockImplementation((user) => {
+    if (!user || !user.id) {
+      throw new Error('User with ID is required to generate tokens')
+    }
+    return Promise.resolve({
+      accessToken: 'mock.access.token',
+      refreshToken: 'mock.refresh.token'
+    })
+  }),
+  createAndActivateUserProfile: jest.fn().mockImplementation(
+    (
+      userId,
+      email,
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      firstname,
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      lastname,
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      options
+    ) => {
+      return Promise.resolve({
+        id: userId,
+        email,
+        isActive: true,
+        password: 'hashed-password'
+      })
+    }
+  ),
+  verifyToken: jest.fn()
 }
 
 export const mockTranslationService = {
