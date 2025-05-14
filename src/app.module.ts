@@ -17,6 +17,7 @@ import { ApiDocsModule } from '@modules/api-docs/api-docs.module'
 import { AuthModule } from '@modules/auth/auth.module'
 import { EntitiesModule } from '@modules/entities/entities.module'
 import { HealthModule } from '@modules/health/health.module'
+import { InvitationModule } from '@modules/invitation/invitation.module'
 import { OrganizationsModule } from '@modules/organizations/organizations.module'
 
 /**
@@ -33,7 +34,8 @@ import { OrganizationsModule } from '@modules/organizations/organizations.module
     AccountAccessModule,
     AccountsModule,
     OrganizationsModule,
-    EntitiesModule
+    EntitiesModule,
+    InvitationModule
   ],
   controllers: [],
   providers: [
