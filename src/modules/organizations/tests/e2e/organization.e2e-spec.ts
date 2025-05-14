@@ -65,7 +65,7 @@ describe('Organizations Module (e2e)', () => {
       password: 'TestPassword123',
       firstname: 'Organization',
       lastname: 'Manager',
-      roles: ['user', 'organization_administrator'],
+      roles: ['user', 'admin'],
       permissions: ['ORGANIZATION_CREATION', 'ORGANIZATION_UPDATE']
     })
 

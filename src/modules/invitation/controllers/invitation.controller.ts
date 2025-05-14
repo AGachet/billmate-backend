@@ -1,0 +1,67 @@
+/**
+ * Resources
+ */
+import { Body, Controller, Post, Req, UseGuards } from '@nestjs/common'
+import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
+
+/**
+ * Dependencies
+ */
+import { RequirePermissions } from '@common/decorators/require-permissions.decorator'
+import { JwtAuthGuard } from '@modules/auth/guards/jwt-auth.guard'
+import { PermissionsGuard } from '@modules/auth/guards/permissions.guard'
+import { InvitationService } from '@modules/invitation/services/invitation.service'
+
+/**
+ * DTO
+ */
+import { SignInResponseDto } from '@modules/auth/dto/responses/signin.response.dto'
+import { AcceptInvitationDto } from '@modules/invitation/dto/requests/accept-invitation.dto'
+import { CreateInvitationDto } from '@modules/invitation/dto/requests/create-invitation.dto'
+import { InvitationResponseDto } from '@modules/invitation/dto/responses/invitation.response.dto'
+
+/**
+ * Type
+ */
+import type { User } from '@prisma/client'
+import type { Request } from 'express'
+
+// Extend Request type to include user property
+interface AuthenticatedRequest extends Request {
+  user: User
+}
+
+/**
+ * Declaration
+ */
+@ApiTags('Invitations')
+@Controller('invitations')
+export class InvitationController {
+  constructor(private readonly invitationService: InvitationService) {}
+
+  @Post()
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions(['USER_ACCOUNTS_INVITATION', 'USER_ENTITIES_INVITATION'], 'ACCOUNT_ADMINISTRATION', { requireAll: false })
+  /** Start -- Documentation */
+  @ApiOperation({ summary: 'Create invitation', description: 'Create an invitation for a new user to join an account or entity.' })
+  @ApiResponse({ status: 200, description: 'Invitation created successfully', type: InvitationResponseDto })
+  @ApiResponse({ status: 400, description: 'Invalid request' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden - user does not have required permissions' })
+  /** End -- Documentation */
+  async createInvitation(@Req() req: AuthenticatedRequest, @Body() createInvitationDto: CreateInvitationDto): Promise<InvitationResponseDto> {
+    return this.invitationService.createInvitation(req.user.id, createInvitationDto)
+  }
+
+  @Post('accept')
+  /** Start -- Documentation */
+  @ApiOperation({ summary: 'Accept invitation', description: 'Accept an invitation and complete account setup.' })
+  @ApiResponse({ status: 200, description: 'Invitation accepted successfully', type: SignInResponseDto })
+  @ApiResponse({ status: 400, description: 'Invalid request' })
+  @ApiResponse({ status: 404, description: 'Invitation not found or expired' })
+  /** End -- Documentation */
+  async acceptInvitation(@Body() acceptInvitationDto: AcceptInvitationDto): Promise<SignInResponseDto> {
+    const result = await this.invitationService.acceptInvitation(acceptInvitationDto)
+    return { userId: result.userId }
+  }
+}

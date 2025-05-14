@@ -50,6 +50,12 @@ export const mockPrismaService = {
     deleteMany: jest.fn() as MockedFunction<PrismaClientMethod>,
     createMany: jest.fn() as MockedFunction<PrismaClientMethod>
   },
+  userRoleLink: {
+    create: jest.fn() as MockedFunction<PrismaClientMethod>,
+    createMany: jest.fn() as MockedFunction<PrismaClientMethod>,
+    findMany: jest.fn() as MockedFunction<PrismaClientMethod>,
+    deleteMany: jest.fn() as MockedFunction<PrismaClientMethod>
+  },
   organizationAccountLink: {
     create: jest.fn() as MockedFunction<PrismaClientMethod>
   },
@@ -64,6 +70,9 @@ export const mockPrismaService = {
     delete: jest.fn() as MockedFunction<PrismaClientMethod>
   },
   people: {
+    create: jest.fn() as MockedFunction<PrismaClientMethod>
+  },
+  preference: {
     create: jest.fn() as MockedFunction<PrismaClientMethod>
   },
   $transaction: jest.fn((callback) => callback(mockPrismaService))

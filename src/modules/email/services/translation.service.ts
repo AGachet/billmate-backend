@@ -28,12 +28,26 @@ interface PasswordResetTemplate extends EmailTemplate {
   expiration: string
 }
 
+interface InvitationTemplate {
+  subject: string
+  title: string
+  greeting: string
+  bodyWithName: string
+  bodyWithoutName: string
+  button: string
+  fallback: string
+  expiration: string
+  ignore: string
+  footer: string
+}
+
 /**
  * Declaration
  */
 interface Translations {
   accountConfirmation: EmailTemplate
   passwordReset: PasswordResetTemplate
+  invitation: InvitationTemplate
 }
 
 export type TranslationKey = keyof Translations
