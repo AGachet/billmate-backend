@@ -43,6 +43,55 @@ describe('InvitationService', () => {
     const mockInvitationToken = 'mock.invitation.token'
     mockJwtService.sign.mockReturnValue(mockInvitationToken)
 
+    // Ensure userToken is properly mocked
+    mockPrismaService.userToken = {
+      create: jest.fn(),
+      findFirst: jest.fn(),
+      delete: jest.fn(),
+      findMany: jest.fn(),
+      deleteMany: jest.fn()
+    }
+
+    // Mock invitation methods
+    mockPrismaService.invitation = {
+      create: jest.fn().mockResolvedValue({ id: 'mock-invitation-id' }),
+      findFirst: jest.fn(),
+      findMany: jest.fn(),
+      update: jest.fn(),
+      delete: jest.fn()
+    }
+
+    // Mock invitation links
+    mockPrismaService.invitationAccountLink = {
+      createMany: jest.fn()
+    }
+
+    mockPrismaService.invitationEntityLink = {
+      createMany: jest.fn()
+    }
+
+    mockPrismaService.invitationRoleLink = {
+      createMany: jest.fn()
+    }
+
+    // Ensure all necessary Prisma methods are mocked
+    mockPrismaService.user = {
+      ...(mockPrismaService.user || {}),
+      findUnique: jest.fn(),
+      findMany: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
+      delete: jest.fn()
+    }
+
+    // Mock the transaction function with proper implementation
+    mockPrismaService.$transaction = jest.fn().mockImplementation(async (callback) => {
+      if (typeof callback === 'function') {
+        return await callback(mockPrismaService)
+      }
+      return Promise.resolve(callback)
+    })
+
     const module = await createTestingModule([
       InvitationService,
       {
@@ -137,6 +186,13 @@ describe('InvitationService', () => {
     }
 
     const mockInvitationToken = 'mock.invitation.token'
+    const mockUserTokenRecord = {
+      id: '1',
+      userId: '2',
+      token: mockInvitationToken,
+      type: TokenType.INVITATION,
+      expiresAt: new Date(Date.now() + 86400000)
+    }
 
     describe('when successful', () => {
       beforeEach(() => {
@@ -149,6 +205,12 @@ describe('InvitationService', () => {
           isActive: false,
           password: ''
         })
+        prismaService.userToken.create.mockResolvedValue(mockUserTokenRecord)
+        prismaService.invitation.create.mockResolvedValue({ id: 'mock-invitation-id' })
+        prismaService.invitationAccountLink.createMany.mockResolvedValue({ count: 1 })
+        prismaService.invitationEntityLink.createMany.mockResolvedValue({ count: 1 })
+        prismaService.invitationRoleLink.createMany.mockResolvedValue({ count: 1 })
+
         jwtService.sign.mockReturnValue(mockInvitationToken)
         envConfig.get.mockImplementation((key) => {
           const values = {
@@ -158,6 +220,7 @@ describe('InvitationService', () => {
           }
           return values[key]
         })
+        authService.createUniqueToken.mockResolvedValue(mockUserTokenRecord)
       })
 
       it('should create an invitation successfully', async () => {
@@ -178,14 +241,38 @@ describe('InvitationService', () => {
             sub: expect.any(String),
             firstname: createInvitationDto.firstname,
             lastname: createInvitationDto.lastname,
-            roleIds: createInvitationDto.roleIds,
-            accountIds: createInvitationDto.accountIds,
-            entityIds: createInvitationDto.entityIds,
             locale: createInvitationDto.locale
           }),
           expect.any(Object)
         )
         expect(authService.createUniqueToken).toHaveBeenCalledWith(expect.any(String), mockInvitationToken, TokenType.INVITATION, '1d')
+
+        // Verify that the invitation is created with the correct links
+        expect(prismaService.invitation.create).toHaveBeenCalled()
+        expect(prismaService.invitationAccountLink.createMany).toHaveBeenCalledWith({
+          data: expect.arrayContaining([
+            expect.objectContaining({
+              invitationId: 'mock-invitation-id',
+              accountId: mockAccount.id
+            })
+          ])
+        })
+        expect(prismaService.invitationEntityLink.createMany).toHaveBeenCalledWith({
+          data: expect.arrayContaining([
+            expect.objectContaining({
+              invitationId: 'mock-invitation-id',
+              entityId: mockEntity.id
+            })
+          ])
+        })
+        expect(prismaService.invitationRoleLink.createMany).toHaveBeenCalledWith({
+          data: expect.arrayContaining([
+            expect.objectContaining({
+              invitationId: 'mock-invitation-id',
+              roleId: 1
+            })
+          ])
+        })
       })
 
       it('should reuse existing inactive user', async () => {
@@ -251,7 +338,7 @@ describe('InvitationService', () => {
         // Arrange
         prismaService.user.findUnique.mockResolvedValueOnce(null) // Inviter not found
 
-        // Act & Assert - Nous modifions l'attente pour correspondre à l'erreur réelle
+        // Act & Assert
         await expect(service.createInvitation(mockUser.id, createInvitationDto)).rejects.toThrow(NotFoundException)
       })
 
@@ -290,7 +377,7 @@ describe('InvitationService', () => {
         prismaService.user.findUnique.mockResolvedValueOnce(mockInviter)
         prismaService.user.findUnique.mockRejectedValueOnce(new Error('Database error'))
 
-        // Act & Assert - Ajuster à l'erreur réelle
+        // Act & Assert
         await expect(service.createInvitation(mockUser.id, createInvitationDto)).rejects.toThrow(BadRequestException)
 
         // Verify
@@ -319,6 +406,16 @@ describe('InvitationService', () => {
       locale: Locale.FR
     }
 
+    const mockInvitation = {
+      id: 'invitation-1',
+      inviterUserId: '1',
+      inviteeUserEmail: 'invited@test.com',
+      status: 'SENT',
+      accountsLinked: [{ accountId: mockAccount.id }],
+      entitiesLinked: [{ entityId: mockEntity.id }],
+      rolesLinked: [{ roleId: 1 }]
+    }
+
     describe('when successful', () => {
       beforeEach(() => {
         jwtService.verify.mockReturnValue(mockTokenPayload)
@@ -335,6 +432,7 @@ describe('InvitationService', () => {
             password: ''
           }
         })
+        prismaService.invitation.findFirst.mockResolvedValue(mockInvitation)
         prismaService.user.findUnique.mockResolvedValue({
           id: '2',
           email: mockTokenPayload.email,
@@ -346,6 +444,23 @@ describe('InvitationService', () => {
           email: mockTokenPayload.email,
           isActive: true,
           password: 'hashed-password'
+        })
+        prismaService.invitation.update.mockResolvedValue({
+          ...mockInvitation,
+          status: 'ACCEPTED',
+          inviteeUserId: '2',
+          acceptedAt: new Date()
+        })
+        prismaService.userToken.delete.mockResolvedValue({ id: '1' })
+
+        authService.generateTokens.mockResolvedValue({
+          accessToken: 'mock.access.token',
+          refreshToken: 'mock.refresh.token'
+        })
+        authService.createAndActivateUserProfile.mockResolvedValue({
+          id: '2',
+          email: mockTokenPayload.email,
+          isActive: true
         })
       })
 
@@ -369,6 +484,21 @@ describe('InvitationService', () => {
             email: mockTokenPayload.email
           })
         )
+
+        // Verify that the invitation is updated to ACCEPTED status
+        expect(prismaService.invitation.update).toHaveBeenCalledWith({
+          where: { id: mockInvitation.id },
+          data: expect.objectContaining({
+            status: 'ACCEPTED',
+            inviteeUserId: '2',
+            acceptedAt: expect.any(Date)
+          })
+        })
+
+        // Verify that the token is deleted after use
+        expect(prismaService.userToken.delete).toHaveBeenCalledWith({
+          where: { id: '1' }
+        })
       })
     })
 
@@ -379,7 +509,7 @@ describe('InvitationService', () => {
           throw new Error('Invalid token')
         })
 
-        // Act & Assert - Ajuster à l'erreur réelle
+        // Act & Assert
         await expect(service.acceptInvitation(acceptInvitationDto)).rejects.toThrow(UnauthorizedException)
       })
 
@@ -388,11 +518,33 @@ describe('InvitationService', () => {
         jwtService.verify.mockReturnValue(mockTokenPayload)
         prismaService.userToken.findFirst.mockResolvedValue(null)
 
-        // Act & Assert - Ajuster à l'erreur réelle
+        // Act & Assert
         await expect(service.acceptInvitation(acceptInvitationDto)).rejects.toThrow(NotFoundException)
       })
 
-      it('should throw NotFoundException if user is not found', async () => {
+      it('should throw NotFoundException if invitation is not found', async () => {
+        // Arrange
+        jwtService.verify.mockReturnValue(mockTokenPayload)
+        prismaService.userToken.findFirst.mockResolvedValue({
+          id: '1',
+          userId: '2',
+          token: acceptInvitationDto.invitationToken,
+          type: TokenType.INVITATION,
+          expiresAt: new Date(Date.now() + 86400000),
+          user: {
+            id: '2',
+            email: mockTokenPayload.email,
+            isActive: false,
+            password: ''
+          }
+        })
+        prismaService.invitation.findFirst.mockResolvedValue(null)
+
+        // Act & Assert
+        await expect(service.acceptInvitation(acceptInvitationDto)).rejects.toThrow(NotFoundException)
+      })
+
+      it('should throw BadRequestException if user is not found', async () => {
         // Arrange
         jwtService.verify.mockReturnValue(mockTokenPayload)
         prismaService.userToken.findFirst.mockResolvedValue({
@@ -403,6 +555,7 @@ describe('InvitationService', () => {
           expiresAt: new Date(Date.now() + 86400000),
           user: null
         })
+        prismaService.invitation.findFirst.mockResolvedValue(mockInvitation)
         prismaService.user.findUnique.mockResolvedValue(null)
 
         // Act & Assert
@@ -426,6 +579,7 @@ describe('InvitationService', () => {
             password: ''
           }
         })
+        prismaService.invitation.findFirst.mockResolvedValue(mockInvitation)
         prismaService.user.findUnique.mockResolvedValue({
           id: '2',
           email: mockTokenPayload.email,
@@ -439,6 +593,129 @@ describe('InvitationService', () => {
 
         // Verify
         expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Failed to accept invitation'), 'acceptInvitation')
+      })
+    })
+  })
+
+  describe('getUserInvitations', () => {
+    const userId = mockUser.id
+    const mockInvitations = [
+      {
+        id: '1',
+        inviterUserId: userId,
+        inviteeUserId: null,
+        inviteeUserEmail: 'invited1@test.com',
+        status: 'SENT',
+        invitedAt: new Date(),
+        acceptedAt: null,
+        accountsLinked: [
+          {
+            account: {
+              id: mockAccount.id,
+              name: 'Test Account'
+            }
+          }
+        ],
+        entitiesLinked: [
+          {
+            entity: {
+              id: mockEntity.id,
+              name: 'Test Entity'
+            }
+          }
+        ],
+        rolesLinked: [
+          {
+            role: {
+              id: 1,
+              name: 'User'
+            }
+          }
+        ]
+      },
+      {
+        id: '2',
+        inviterUserId: userId,
+        inviteeUserId: 'user-2',
+        inviteeUserEmail: 'invited2@test.com',
+        status: 'ACCEPTED',
+        invitedAt: new Date(Date.now() - 86400000), // 1 day ago
+        acceptedAt: new Date(),
+        accountsLinked: [
+          {
+            account: {
+              id: mockAccount.id,
+              name: 'Test Account'
+            }
+          }
+        ],
+        entitiesLinked: [],
+        rolesLinked: [
+          {
+            role: {
+              id: 1,
+              name: 'User'
+            }
+          }
+        ]
+      }
+    ]
+
+    it('should return all invitations sent by a user', async () => {
+      // Arrange
+      prismaService.invitation.findMany.mockResolvedValue(mockInvitations)
+
+      // Act
+      const result = await service.getUserInvitations(userId)
+
+      // Assert
+      expect(result).toEqual({
+        invitations: expect.arrayContaining([
+          expect.objectContaining({
+            id: '1',
+            inviterUserId: userId,
+            inviteeUserEmail: 'invited1@test.com',
+            status: 'SENT'
+          }),
+          expect.objectContaining({
+            id: '2',
+            inviterUserId: userId,
+            inviteeUserId: 'user-2',
+            inviteeUserEmail: 'invited2@test.com',
+            status: 'ACCEPTED'
+          })
+        ])
+      })
+
+      // Verify
+      expect(prismaService.invitation.findMany).toHaveBeenCalledWith({
+        where: { inviterUserId: userId },
+        include: expect.any(Object),
+        orderBy: { invitedAt: 'desc' }
+      })
+    })
+
+    it('should return empty array when user has no invitations', async () => {
+      // Arrange
+      prismaService.invitation.findMany.mockResolvedValue([])
+
+      // Act
+      const result = await service.getUserInvitations(userId)
+
+      // Assert
+      expect(result).toEqual({ invitations: [] })
+    })
+
+    it('should handle database error gracefully', async () => {
+      // Arrange
+      prismaService.invitation.findMany.mockRejectedValue(new Error('Database error'))
+
+      // Act & Assert
+      await expect(service.getUserInvitations(userId)).rejects.toThrow(Error)
+      expect(prismaService.invitation.findMany).toHaveBeenCalledWith({
+        where: { inviterUserId: userId },
+        include: expect.any(Object),
+        orderBy: { invitedAt: 'desc' }
       })
     })
   })
