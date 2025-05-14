@@ -1,7 +1,7 @@
 /**
  * Resources
  */
-import { Body, Controller, Post, Req, UseGuards } from '@nestjs/common'
+import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common'
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
 
 /**
@@ -19,6 +19,7 @@ import { SignInResponseDto } from '@modules/auth/dto/responses/signin.response.d
 import { AcceptInvitationDto } from '@modules/invitation/dto/requests/accept-invitation.dto'
 import { CreateInvitationDto } from '@modules/invitation/dto/requests/create-invitation.dto'
 import { InvitationResponseDto } from '@modules/invitation/dto/responses/invitation.response.dto'
+import { ListInvitationsResponseDto } from '@modules/invitation/dto/responses/list-invitations.response.dto'
 
 /**
  * Type
@@ -51,6 +52,18 @@ export class InvitationController {
   /** End -- Documentation */
   async createInvitation(@Req() req: AuthenticatedRequest, @Body() createInvitationDto: CreateInvitationDto): Promise<InvitationResponseDto> {
     return this.invitationService.createInvitation(req.user.id, createInvitationDto)
+  }
+
+  @Get()
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions([], 'ACCOUNT_ADMINISTRATION')
+  /** Start -- Documentation */
+  @ApiOperation({ summary: 'Get user invitations', description: 'Get all invitations sent by the authenticated user.' })
+  @ApiResponse({ status: 200, description: 'List of invitations', type: ListInvitationsResponseDto })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  /** End -- Documentation */
+  async getUserInvitations(@Req() req: AuthenticatedRequest): Promise<ListInvitationsResponseDto> {
+    return this.invitationService.getUserInvitations(req.user.id)
   }
 
   @Post('accept')

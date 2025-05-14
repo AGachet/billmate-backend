@@ -49,6 +49,7 @@ model Entity {
   roles               EntityRoleLink[]
   peoples             PeopleEntityLink[]
   organizationsLinked OrganizationEntityLink[]
+  invitationsLinked   InvitationEntityLink[]
 
   @@index([organizationId])
   @@index([accountId])

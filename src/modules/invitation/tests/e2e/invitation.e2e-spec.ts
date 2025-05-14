@@ -172,6 +172,34 @@ describe('Invitation Module (e2e)', () => {
     })
   })
 
+  describe('List User Invitations', () => {
+    it('should return user invitations when authenticated', async () => {
+      const response = await agent.get('/api/invitations')
+
+      // Verify successful response
+      expect(response.status).toBe(200)
+      expect(response.body).toHaveProperty('invitations')
+      expect(Array.isArray(response.body.invitations)).toBe(true)
+
+      // Our test user should have at least one invitation (the one created in the previous test)
+      expect(response.body.invitations.length).toBeGreaterThan(0)
+
+      // Verify invitation structure
+      const invitation = response.body.invitations[0]
+      expect(invitation).toMatchObject({
+        id: expect.any(String),
+        inviterUserId: testUser.id,
+        inviteeUserEmail: expect.any(String),
+        status: expect.any(String),
+        invitedAt: expect.any(String)
+      })
+    })
+
+    it('should reject invitation listing when not authenticated', async () => {
+      await request(app.getHttpServer()).get('/api/invitations').expect(401)
+    })
+  })
+
   describe('Invitation Acceptance', () => {
     // This test depends on the invitation token from the previous test
     it('should accept a valid invitation token', async () => {

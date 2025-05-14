@@ -3,6 +3,7 @@
  */
 import { Module } from '@nestjs/common'
 import { APP_FILTER } from '@nestjs/core'
+import { ScheduleModule } from '@nestjs/schedule'
 
 /**
  * Dependencies
@@ -35,7 +36,8 @@ import { OrganizationsModule } from '@modules/organizations/organizations.module
     AccountsModule,
     OrganizationsModule,
     EntitiesModule,
-    InvitationModule
+    InvitationModule,
+    ScheduleModule.forRoot()
   ],
   controllers: [],
   providers: [

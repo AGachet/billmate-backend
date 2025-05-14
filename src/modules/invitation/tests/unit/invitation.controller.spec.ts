@@ -44,7 +44,8 @@ describe('InvitationController', () => {
     // Create mock for InvitationService
     const mockInvitationService = {
       createInvitation: jest.fn(),
-      acceptInvitation: jest.fn()
+      acceptInvitation: jest.fn(),
+      getUserInvitations: jest.fn()
     }
 
     // No need to include JwtAuthGuard or PermissionsGuard for unit tests
@@ -123,6 +124,48 @@ describe('InvitationController', () => {
       // Assert
       expect(invitationService.acceptInvitation).toHaveBeenCalledWith(dto)
       expect(result).toEqual({ userId: serviceResponse.userId })
+    })
+  })
+
+  describe('getUserInvitations', () => {
+    it('should call invitationService.getUserInvitations with correct user ID', async () => {
+      // Arrange
+      const mockInvitations = {
+        invitations: [
+          {
+            id: '1',
+            inviterUserId: mockUser.id,
+            inviteeUserEmail: 'invited1@test.com',
+            status: 'SENT',
+            invitedAt: new Date(),
+            accounts: [{ id: 'account-1', name: 'Account 1' }],
+            entities: [{ id: 'entity-1', name: 'Entity 1' }],
+            roles: [{ id: 1, name: 'User' }]
+          }
+        ]
+      }
+
+      invitationService.getUserInvitations.mockResolvedValue(mockInvitations)
+
+      // Act
+      const result = await controller.getUserInvitations(mockRequest)
+
+      // Assert
+      expect(invitationService.getUserInvitations).toHaveBeenCalledWith(mockUser.id)
+      expect(result).toEqual(mockInvitations)
+    })
+
+    it('should return empty invitations array when user has no invitations', async () => {
+      // Arrange
+      const emptyInvitations = { invitations: [] }
+      invitationService.getUserInvitations.mockResolvedValue(emptyInvitations)
+
+      // Act
+      const result = await controller.getUserInvitations(mockRequest)
+
+      // Assert
+      expect(invitationService.getUserInvitations).toHaveBeenCalledWith(mockUser.id)
+      expect(result).toEqual(emptyInvitations)
     })
   })
 })
