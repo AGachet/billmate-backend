@@ -10,6 +10,7 @@ model Account {
   updatedAt   DateTime  @updatedAt                @map("updated_at")
 
   organizationsLinked OrganizationAccountLink[]
+  invitationsLinked   InvitationAccountLink[]
   usersLinked         UserAccountLink[]
   peopleLinked        PeopleAccountLink[]
 
