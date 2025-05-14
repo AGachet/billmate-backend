@@ -19,5 +19,17 @@ export const en = {
     ignore: "If you didn't request this reset, you can ignore this email.",
     expiration: 'This link will expire in 1 hour.',
     footer: 'This email was sent automatically. Please do not reply.'
+  },
+  invitation: {
+    subject: 'You have been invited to join BillMate',
+    title: 'You have been invited to join BillMate',
+    greeting: 'Hello',
+    bodyWithName: '{inviterName} has invited you to join the BillMate platform. Click the button below to accept the invitation and set up your account.',
+    bodyWithoutName: 'An administrator has invited you to join the BillMate platform. Click the button below to accept the invitation and set up your account.',
+    button: 'Accept invitation',
+    fallback: "If the button doesn't work, you can copy and paste the following link into your browser:",
+    expiration: 'This link will expire in 7 days.',
+    ignore: "If you didn't request to join BillMate, you can ignore this email.",
+    footer: '© {year} BillMate. All rights reserved.'
   }
 }

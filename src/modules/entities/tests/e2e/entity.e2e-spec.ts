@@ -67,7 +67,7 @@ describe('Entities Module (e2e)', () => {
       password: 'TestPassword123',
       firstname: 'Entity',
       lastname: 'Manager',
-      roles: ['user', 'account_administrator'],
+      roles: ['user', 'admin'],
       permissions: ['ENTITY_CREATION', 'ENTITY_USER_MANAGEMENT']
     })
 

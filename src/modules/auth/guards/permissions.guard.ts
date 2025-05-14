@@ -7,7 +7,7 @@ import { Reflector } from '@nestjs/core'
 /**
  * Dependencies
  */
-import { FULL_ACCESS, MODULE_KEY, PERMISSIONS_KEY } from '@common/decorators/require-permissions.decorator'
+import { FULL_ACCESS, MODULE_KEY, PERMISSIONS_KEY, REQUIRE_ALL_KEY } from '@common/decorators/require-permissions.decorator'
 import { Logger } from '@common/services/logger/logger.service'
 import { PrismaService } from '@configs/prisma/services/prisma.service'
 
@@ -25,6 +25,7 @@ export class PermissionsGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const requiredPermissions = this.reflector.getAllAndOverride<string[]>(PERMISSIONS_KEY, [context.getHandler(), context.getClass()])
     const requiredModule = this.reflector.getAllAndOverride<string>(MODULE_KEY, [context.getHandler(), context.getClass()])
+    const requireAll = this.reflector.getAllAndOverride<boolean>(REQUIRE_ALL_KEY, [context.getHandler(), context.getClass()])
 
     // If no module required, allow access
     if (!requiredModule) return true
@@ -92,10 +93,14 @@ export class PermissionsGuard implements CanActivate {
     // Check if user has all required permissions
     const userPermissions = user.rolesLinked.flatMap((userRole) => userRole.role.permissionsLinked.map((permissionLink) => permissionLink.permission.name))
 
-    const hasAllPermissions = requiredPermissions.every((permission) => userPermissions.includes(permission))
+    // If requireAll is false, check if user has at least one required permission
+    // Otherwise, check if user has all required permissions (default behavior)
+    const hasRequiredPermissions =
+      requireAll === false ? requiredPermissions.some((permission) => userPermissions.includes(permission)) : requiredPermissions.every((permission) => userPermissions.includes(permission))
 
-    if (!hasAllPermissions) {
-      this.logger.warn(`Access denied: User ${userId} does not have required permissions: ${requiredPermissions.join(', ')}`, 'PermissionsGuard')
+    if (!hasRequiredPermissions) {
+      const requiredText = requireAll === false ? 'at least one of' : 'all of'
+      this.logger.warn(`Access denied: User ${userId} does not have ${requiredText} required permissions: ${requiredPermissions.join(', ')}`, 'PermissionsGuard')
       throw new UnauthorizedException('You do not have the required permissions')
     }
 

@@ -5,8 +5,7 @@ INSERT INTO public.roles (name, is_active, updated_at)
 VALUES
   ('guest', TRUE, NOW()),
   ('user', TRUE, NOW()),
-  ('account_administrator', TRUE, NOW()),
-  ('organization_administrator', TRUE, NOW());
+  ('admin', TRUE, NOW());
 
 ------
 -- 2. Default module types
@@ -40,6 +39,9 @@ VALUES
   -- account_administration module permissions
   ((SELECT id FROM public.modules WHERE name = 'ACCOUNT_ADMINISTRATION'), 'ACCOUNT_UPDATE', 'Update an account', NOW()),
   ((SELECT id FROM public.modules WHERE name = 'ACCOUNT_ADMINISTRATION'), 'ACCOUNT_USER_MANAGEMENT', 'Manage account users', NOW()),
+  ((SELECT id FROM public.modules WHERE name = 'ACCOUNT_ADMINISTRATION'), 'USER_ACCOUNTS_INVITATION', 'Invite users to an account', NOW()),
+  ((SELECT id FROM public.modules WHERE name = 'ACCOUNT_ADMINISTRATION'), 'USER_ENTITIES_INVITATION', 'Invite users to an entity', NOW()),
+  ((SELECT id FROM public.modules WHERE name = 'ACCOUNT_ADMINISTRATION'), 'USER_ROLE_ALLOCATION', 'Allocate roles to users', NOW()),
   ((SELECT id FROM public.modules WHERE name = 'ACCOUNT_ADMINISTRATION'), 'ENTITY_CREATION', 'Create an entity', NOW()),
   ((SELECT id FROM public.modules WHERE name = 'ACCOUNT_ADMINISTRATION'), 'ENTITY_USER_MANAGEMENT', 'Manage entity users', NOW()),
   -- organization_management module permissions
@@ -52,11 +54,15 @@ VALUES
 ------
 INSERT INTO public.roles_modules_links (role_id, module_id, updated_at)
 VALUES
+  -- guest role modules
   ((SELECT id FROM public.roles WHERE name = 'guest'), (SELECT id FROM public.modules WHERE name = 'USER_ACCOUNT_CREATION'), NOW()),
   ((SELECT id FROM public.roles WHERE name = 'guest'), (SELECT id FROM public.modules WHERE name = 'USER_ACCOUNT_PASSWORD_RECOVERY'), NOW()),
+  -- user role modules
   ((SELECT id FROM public.roles WHERE name = 'user'), (SELECT id FROM public.modules WHERE name = 'USER_ACCOUNT_PASSWORD_RECOVERY'), NOW()),
-  ((SELECT id FROM public.roles WHERE name = 'account_administrator'), (SELECT id FROM public.modules WHERE name = 'ACCOUNT_ADMINISTRATION'), NOW()),
-  ((SELECT id FROM public.roles WHERE name = 'organization_administrator'), (SELECT id FROM public.modules WHERE name = 'ORGANIZATION_ADMINISTRATION'), NOW());
+  -- admin role modules
+  ((SELECT id FROM public.roles WHERE name = 'admin'), (SELECT id FROM public.modules WHERE name = 'ACCOUNT_ADMINISTRATION'), NOW()),
+  ((SELECT id FROM public.roles WHERE name = 'admin'), (SELECT id FROM public.modules WHERE name = 'ORGANIZATION_ADMINISTRATION'), NOW()),
+  ((SELECT id FROM public.roles WHERE name = 'admin'), (SELECT id FROM public.modules WHERE name = 'USER_ACCOUNT_PASSWORD_RECOVERY'), NOW());
 
 ------
 -- 6. Link roles to authorized permissions
@@ -68,14 +74,18 @@ VALUES
   -- user role permissions
   ((SELECT id FROM public.roles WHERE name = 'user'), (SELECT id FROM public.module_permissions WHERE name = 'PASSWORD_RECOVERY_LINK_REQUEST_OWN'), NOW()),
   ((SELECT id FROM public.roles WHERE name = 'user'), (SELECT id FROM public.module_permissions WHERE name = 'PASSWORD_RECOVERY_RESET_OWN'), NOW()),
-  -- account administrator role permissions
-  ((SELECT id FROM public.roles WHERE name = 'account_administrator'), (SELECT id FROM public.module_permissions WHERE name = 'ACCOUNT_UPDATE'), NOW()),
-  ((SELECT id FROM public.roles WHERE name = 'account_administrator'), (SELECT id FROM public.module_permissions WHERE name = 'ACCOUNT_USER_MANAGEMENT'), NOW()),
-  ((SELECT id FROM public.roles WHERE name = 'account_administrator'), (SELECT id FROM public.module_permissions WHERE name = 'ENTITY_CREATION'), NOW()),
-  ((SELECT id FROM public.roles WHERE name = 'account_administrator'), (SELECT id FROM public.module_permissions WHERE name = 'ENTITY_USER_MANAGEMENT'), NOW()),
-  -- organization administrator role permissions
-  ((SELECT id FROM public.roles WHERE name = 'organization_administrator'), (SELECT id FROM public.module_permissions WHERE name = 'ORGANIZATION_CREATION'), NOW()),
-  ((SELECT id FROM public.roles WHERE name = 'organization_administrator'), (SELECT id FROM public.module_permissions WHERE name = 'ORGANIZATION_UPDATE'), NOW());
+  -- admin role permissions
+  ((SELECT id FROM public.roles WHERE name = 'admin'), (SELECT id FROM public.module_permissions WHERE name = 'PASSWORD_RECOVERY_LINK_REQUEST_OWN'), NOW()),
+  ((SELECT id FROM public.roles WHERE name = 'admin'), (SELECT id FROM public.module_permissions WHERE name = 'PASSWORD_RECOVERY_RESET_OWN'), NOW()),
+  ((SELECT id FROM public.roles WHERE name = 'admin'), (SELECT id FROM public.module_permissions WHERE name = 'ACCOUNT_UPDATE'), NOW()),
+  ((SELECT id FROM public.roles WHERE name = 'admin'), (SELECT id FROM public.module_permissions WHERE name = 'ACCOUNT_USER_MANAGEMENT'), NOW()),
+  ((SELECT id FROM public.roles WHERE name = 'admin'), (SELECT id FROM public.module_permissions WHERE name = 'ENTITY_CREATION'), NOW()),
+  ((SELECT id FROM public.roles WHERE name = 'admin'), (SELECT id FROM public.module_permissions WHERE name = 'USER_ACCOUNTS_INVITATION'), NOW()),
+  ((SELECT id FROM public.roles WHERE name = 'admin'), (SELECT id FROM public.module_permissions WHERE name = 'USER_ENTITIES_INVITATION'), NOW()),
+  ((SELECT id FROM public.roles WHERE name = 'admin'), (SELECT id FROM public.module_permissions WHERE name = 'USER_ROLE_ALLOCATION'), NOW()),
+  ((SELECT id FROM public.roles WHERE name = 'admin'), (SELECT id FROM public.module_permissions WHERE name = 'ENTITY_USER_MANAGEMENT'), NOW()),
+  ((SELECT id FROM public.roles WHERE name = 'admin'), (SELECT id FROM public.module_permissions WHERE name = 'ORGANIZATION_CREATION'), NOW()),
+  ((SELECT id FROM public.roles WHERE name = 'admin'), (SELECT id FROM public.module_permissions WHERE name = 'ORGANIZATION_UPDATE'), NOW());
 
 
 ------
