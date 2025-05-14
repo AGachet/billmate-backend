@@ -68,7 +68,7 @@ describe('Accounts Module (e2e)', () => {
       password: 'TestPassword123',
       firstname: 'Account',
       lastname: 'Manager',
-      roles: ['user', 'account_administrator']
+      roles: ['user', 'admin']
     })
 
     // Set up second test user

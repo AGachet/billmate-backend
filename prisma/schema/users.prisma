@@ -12,6 +12,7 @@ enum TokenType {
   ACCOUNT_VALIDATION
   SESSION_REFRESH
   PASSWORD_RESET
+  INVITATION
 
   @@map("token_type")
 }

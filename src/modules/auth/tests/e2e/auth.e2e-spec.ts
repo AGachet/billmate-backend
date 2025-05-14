@@ -218,12 +218,14 @@ describe('Auth Module (e2e)', () => {
       expect(response.body).toHaveProperty('lastname')
       expect(response.body).toHaveProperty('roles')
       expect(response.body).toHaveProperty('accounts')
+      expect(response.body).toHaveProperty('permissions')
+      expect(response.body).toHaveProperty('modules')
 
       expect(response.body.userId).toBe(userId)
       expect(response.body.firstname).toBe(testUser.firstname)
       expect(response.body.lastname).toBe(testUser.lastname)
       expect(response.body.email).toBe(testUser.email)
-      expect(response.body.roles).toEqual(['user'])
+      expect(response.body.roles).toEqual(['admin'])
 
       // Verify account information
       expect(response.body.accounts).toBeInstanceOf(Array)
@@ -235,6 +237,34 @@ describe('Auth Module (e2e)', () => {
         expect(account.name).toBeDefined()
         expect(account.isActive).toBe(true)
       }
+
+      // Verify admin permissions based on default_user_modules_roles.sql
+      const expectedPermissions = [
+        'PASSWORD_RECOVERY_LINK_REQUEST_OWN',
+        'PASSWORD_RECOVERY_RESET_OWN',
+        'ACCOUNT_UPDATE',
+        'ACCOUNT_USER_MANAGEMENT',
+        'ENTITY_CREATION',
+        'USER_ACCOUNTS_INVITATION',
+        'USER_ENTITIES_INVITATION',
+        'USER_ROLE_ALLOCATION',
+        'ENTITY_USER_MANAGEMENT',
+        'ORGANIZATION_CREATION',
+        'ORGANIZATION_UPDATE'
+      ]
+
+      expect(response.body.permissions).toBeInstanceOf(Array)
+      expectedPermissions.forEach((permission) => {
+        expect(response.body.permissions).toContain(permission)
+      })
+
+      // Verify modules
+      const expectedModules = ['ACCOUNT_ADMINISTRATION', 'ORGANIZATION_ADMINISTRATION', 'USER_ACCOUNT_PASSWORD_RECOVERY']
+
+      expect(response.body.modules).toBeInstanceOf(Array)
+      expectedModules.forEach((module) => {
+        expect(response.body.modules).toContain(module)
+      })
     })
 
     it('Should retrieve guest information', async () => {
