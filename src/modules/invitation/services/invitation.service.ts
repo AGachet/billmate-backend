@@ -23,6 +23,7 @@ import { EmailService } from '@modules/email/services/email.service'
 import { AcceptInvitationDto } from '@modules/invitation/dto/requests/accept-invitation.dto'
 import { CreateInvitationDto } from '@modules/invitation/dto/requests/create-invitation.dto'
 import { InvitationResponseDto } from '@modules/invitation/dto/responses/invitation.response.dto'
+import { ListInvitationsResponseDto } from '@modules/invitation/dto/responses/list-invitations.response.dto'
 
 /**
  * Types
@@ -36,9 +37,6 @@ import type { User } from '@prisma/client'
 export interface InvitationTokenPayload extends TokenPayload {
   firstname?: string
   lastname?: string
-  roleIds?: number[]
-  accountIds?: string[]
-  entityIds?: string[]
   locale?: Locale
 }
 
@@ -208,15 +206,12 @@ export class InvitationService {
         })
       }
 
-      // Generate the invitation token with all necessary information
+      // Generate the invitation token with only essential information
       const invitationPayload: InvitationTokenPayload = {
         email: user.email,
         sub: user.id,
         firstname,
         lastname,
-        roleIds,
-        accountIds,
-        entityIds,
         locale
       }
 
@@ -240,6 +235,47 @@ export class InvitationService {
         await this.emailService.sendInvitationEmail(email, invitationToken, inviterName, firstname, locale || UserDefaults.preferences.locale)
       }
 
+      await this.prisma.$transaction(async (tx) => {
+        // Create the invitation
+        const invitation = await tx.invitation.create({
+          data: {
+            inviterUserId: inviterId,
+            inviteeUserEmail: email,
+            status: 'SENT'
+          }
+        })
+
+        // Create the links with the accounts
+        if (accountIds.length > 0) {
+          await tx.invitationAccountLink.createMany({
+            data: accountIds.map((accountId) => ({
+              invitationId: invitation.id,
+              accountId
+            }))
+          })
+        }
+
+        // Create the links with the entities
+        if (entityIds.length > 0) {
+          await tx.invitationEntityLink.createMany({
+            data: entityIds.map((entityId) => ({
+              invitationId: invitation.id,
+              entityId
+            }))
+          })
+        }
+
+        // Create the links with the roles
+        if (roleIds && roleIds.length > 0) {
+          await tx.invitationRoleLink.createMany({
+            data: roleIds.map((roleId) => ({
+              invitationId: invitation.id,
+              roleId
+            }))
+          })
+        }
+      })
+
       return response
     } catch (error) {
       this.logger.error(`Failed to create invitation for ${email}: ${error.message}`, 'createInvitation')
@@ -262,12 +298,6 @@ export class InvitationService {
       // Verify and decode the invitation token
       const payload = await this.verifyInvitationToken(invitationToken)
 
-      // Verify that token contains at least one accountId or entityId
-      if ((!payload.accountIds || payload.accountIds.length === 0) && (!payload.entityIds || payload.entityIds.length === 0)) {
-        this.logger.warn(`Invalid invitation token: missing accountIds and entityIds`, 'acceptInvitation')
-        throw new BadRequestException('The invitation token is invalid: it must contain at least one account or entity')
-      }
-
       // Find the token in the database
       const tokenRecord = await this.prisma.userToken.findFirst({
         where: {
@@ -281,6 +311,32 @@ export class InvitationService {
       })
 
       if (!tokenRecord) throw new NotFoundException('Invalid or expired invitation token')
+
+      // Find the invitation record to get accountIds, entityIds, and roleIds
+      const invitation = await this.prisma.invitation.findFirst({
+        where: {
+          inviteeUserEmail: tokenRecord.user.email,
+          status: 'SENT'
+        },
+        include: {
+          accountsLinked: true,
+          entitiesLinked: true,
+          rolesLinked: true
+        }
+      })
+
+      if (!invitation) throw new NotFoundException('Invitation not found or already used')
+
+      // Extract data from the invitation
+      const accountIds = invitation.accountsLinked.map((link) => link.accountId)
+      const entityIds = invitation.entitiesLinked.map((link) => link.entityId)
+      const roleIds = invitation.rolesLinked.map((link) => link.roleId)
+
+      // Verify that invitation contains at least one accountId or entityId
+      if (accountIds.length === 0 && entityIds.length === 0) {
+        this.logger.warn(`Invalid invitation: missing accountIds and entityIds`, 'acceptInvitation')
+        throw new BadRequestException('The invitation is invalid: it must contain at least one account or entity')
+      }
 
       // Hash the password
       const hashedPassword = await bcrypt.hash(password, 10)
@@ -296,8 +352,18 @@ export class InvitationService {
       const lastname = userLastname || payload.lastname || ''
       const locale = userLocale || payload.locale
 
-      // Activate the user account with the information from the DTO and token
-      await this.activateInvitedUserAccount(tokenRecord.user.id, tokenRecord.user.email, firstname, lastname, payload.accountIds || [], payload.entityIds || [], payload.roleIds || [], locale)
+      // Activate the user account with the information from the DTO, token, and database
+      await this.activateInvitedUserAccount(tokenRecord.user.id, tokenRecord.user.email, firstname, lastname, accountIds, entityIds, roleIds, locale)
+
+      // Mark the invitation as accepted
+      await this.prisma.invitation.update({
+        where: { id: invitation.id },
+        data: {
+          status: 'ACCEPTED',
+          inviteeUserId: tokenRecord.user.id,
+          acceptedAt: new Date()
+        }
+      })
 
       // Delete the used token
       await this.prisma.userToken.delete({
@@ -320,6 +386,63 @@ export class InvitationService {
         throw error
       }
       throw new BadRequestException(`Failed to accept invitation: ${error.message}`)
+    }
+  }
+
+  /**
+   * Get all invitations sent by a user
+   */
+  async getUserInvitations(userId: string): Promise<ListInvitationsResponseDto> {
+    // Get all invitations sent by the user with related accounts, entities, and roles
+    const invitations = await this.prisma.invitation.findMany({
+      where: {
+        inviterUserId: userId
+      },
+      include: {
+        accountsLinked: {
+          include: {
+            account: true
+          }
+        },
+        entitiesLinked: {
+          include: {
+            entity: true
+          }
+        },
+        rolesLinked: {
+          include: {
+            role: true
+          }
+        }
+      },
+      orderBy: {
+        invitedAt: 'desc'
+      }
+    })
+
+    // Format the response
+    return {
+      invitations: invitations.map((invitation) => ({
+        id: invitation.id,
+        inviterUserId: invitation.inviterUserId,
+        inviteeUserId: invitation.inviteeUserId || undefined,
+        inviteeUserEmail: invitation.inviteeUserEmail,
+        status: invitation.status,
+        invitedAt: invitation.invitedAt,
+        acceptedAt: invitation.acceptedAt || undefined,
+        accounts: invitation.accountsLinked.map((link) => ({
+          id: link.account.id,
+          name: link.account.name
+        })),
+        entities: invitation.entitiesLinked.map((link) => ({
+          id: link.entity.id,
+          name: link.entity.name
+        })),
+        roles: invitation.rolesLinked.map((link) => ({
+          id: link.role.id,
+          name: link.role.name
+        }))
+      }))
     }
   }
 
