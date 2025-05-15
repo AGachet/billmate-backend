@@ -1,11 +1,11 @@
 ------
 -- 1. Default user roles
 ------
-INSERT INTO public.roles (name, is_active, updated_at)
+INSERT INTO public.roles (name, description, is_active, updated_at)
 VALUES
-  ('guest', TRUE, NOW()),
-  ('user', TRUE, NOW()),
-  ('admin', TRUE, NOW());
+  ('guest', 'Non-authenticated user', TRUE, NOW()),
+  ('user', 'Basic authenticated user', TRUE, NOW()),
+  ('admin', 'Administrator user', TRUE, NOW());
 
 ------
 -- 2. Default module types
