@@ -1,7 +1,7 @@
 /**
  * Resources
  */
-import { INestApplication } from '@nestjs/common'
+import { INestApplication, ValidationPipe } from '@nestjs/common'
 import { Test, TestingModule } from '@nestjs/testing'
 import cookieParser from 'cookie-parser'
 import * as dotenv from 'dotenv'
@@ -49,6 +49,7 @@ describe('Accounts Module (e2e)', () => {
   let testUser: TestUser
   let testUser2: TestUser
   let accountId: string
+  let entityId: string
 
   beforeAll(async () => {
     // Create NestJS application
@@ -59,6 +60,7 @@ describe('Accounts Module (e2e)', () => {
     app = moduleRef.createNestApplication()
     app.setGlobalPrefix(process.env.API_PREFIX ?? '/api')
     app.use(cookieParser())
+    app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }))
 
     prismaService = moduleRef.get<PrismaService>(PrismaService)
 
@@ -83,6 +85,24 @@ describe('Accounts Module (e2e)', () => {
     // Store account ID
     accountId = testUser.accountId
 
+    // Create a test entity for entity tests
+    const entity = await prismaService.entity.create({
+      data: {
+        name: 'Test Entity',
+        description: 'Test entity for e2e tests',
+        accountId,
+        isActive: true
+      }
+    })
+    entityId = entity.id
+
+    // Get a role for role tests (using an existing role)
+    await prismaService.role.findFirst({
+      where: {
+        OR: [{ accountId }, { accountId: null }]
+      }
+    })
+
     await app.init()
 
     // Create agent for authenticated requests
@@ -96,6 +116,17 @@ describe('Accounts Module (e2e)', () => {
   })
 
   afterAll(async () => {
+    // Clean up test entity
+    if (entityId) {
+      await prismaService.entity
+        .delete({
+          where: { id: entityId }
+        })
+        .catch(() => {
+          // Ignore errors if entity was already deleted
+        })
+    }
+
     // Clean up test users (also cleans up accounts if no other users are linked)
     await cleanupTestUser(prismaService, testUser.email)
     await cleanupTestUser(prismaService, testUser2.email)
@@ -153,21 +184,31 @@ describe('Accounts Module (e2e)', () => {
           id: accountId,
           createdAt: expect.any(String),
           updatedAt: expect.any(String),
-          users: expect.arrayContaining([
-            expect.objectContaining({
-              id: expect.any(String),
-              email: expect.any(String),
-              isActive: true,
-              people: expect.any(Object)
-            })
-          ]),
-          roles: expect.arrayContaining([
-            expect.objectContaining({
-              id: expect.any(Number),
-              name: expect.any(String),
-              isActive: expect.any(Boolean)
-            })
-          ])
+          users: expect.objectContaining({
+            count: expect.any(Number),
+            values: expect.arrayContaining([
+              expect.objectContaining({
+                id: expect.any(String),
+                email: expect.any(String),
+                isActive: true,
+                people: expect.any(Object)
+              })
+            ])
+          }),
+          roles: expect.objectContaining({
+            count: expect.any(Number),
+            values: expect.arrayContaining([
+              expect.objectContaining({
+                id: expect.any(Number),
+                name: expect.any(String),
+                isActive: expect.any(Boolean)
+              })
+            ])
+          }),
+          entities: expect.objectContaining({
+            count: expect.any(Number),
+            values: expect.any(Array)
+          })
         })
 
         // Check isActive state separately
@@ -242,6 +283,136 @@ describe('Accounts Module (e2e)', () => {
           .patch(`/api/accounts/${accountId}/users`)
           .send({ userIds: ['invalid-user-id'] })
           .expect(400)
+      })
+    })
+
+    describe('Account Users Fetch', () => {
+      it('should fetch account users with pagination', async () => {
+        // Fetch users with pagination
+        const response = await agent.get(`/api/accounts/${accountId}/users`).query({ page: 1, limit: 10 }).expect(200)
+
+        expect(response.body).toMatchObject({
+          items: expect.arrayContaining([
+            expect.objectContaining({
+              id: expect.any(String),
+              email: expect.any(String),
+              isActive: true,
+              people: expect.any(Object)
+            })
+          ]),
+          meta: expect.objectContaining({
+            pagination: expect.objectContaining({
+              current: 1,
+              limit: 10,
+              total: expect.any(Number)
+            }),
+            count: expect.any(Number)
+          })
+        })
+      })
+
+      it('should filter account users by search term', async () => {
+        // Get user data from database to use for search
+        const user = await prismaService.user.findUnique({
+          where: { id: testUser.id },
+          include: { people: true }
+        })
+
+        const searchTerm = user?.people?.lastname || 'Manager' // Fallback to a value we set in the test user
+
+        const response = await agent.get(`/api/accounts/${accountId}/users?search=${searchTerm}`).expect(200)
+
+        // Verify that the response contains at least one user with matching name
+        expect(response.body.items.length).toBeGreaterThan(0)
+        const foundUser = response.body.items.find((u) => u.people && u.people.lastname === searchTerm)
+        expect(foundUser).toBeDefined()
+      })
+
+      it('should reject fetching account users without authentication', async () => {
+        await request(app.getHttpServer()).get(`/api/accounts/${accountId}/users`).expect(401)
+      })
+    })
+
+    describe('Account Entities Fetch', () => {
+      it('should fetch account entities with pagination', async () => {
+        const response = await agent.get(`/api/accounts/${accountId}/entities`).query({ page: 1, limit: 10 }).expect(200)
+
+        expect(response.body).toMatchObject({
+          items: expect.arrayContaining([
+            expect.objectContaining({
+              id: expect.any(String),
+              name: expect.any(String),
+              isActive: true
+            })
+          ]),
+          meta: expect.objectContaining({
+            pagination: expect.objectContaining({
+              current: 1,
+              limit: 10,
+              total: expect.any(Number)
+            }),
+            count: expect.any(Number)
+          })
+        })
+      })
+
+      it('should filter entities by active status', async () => {
+        const response = await agent.get(`/api/accounts/${accountId}/entities`).query({ isActive: true }).expect(200)
+
+        // Verify all returned entities are active
+        response.body.items.forEach((entity) => {
+          expect(entity.isActive).toBe(true)
+        })
+      })
+
+      it('should reject fetching account entities without authentication', async () => {
+        await request(app.getHttpServer()).get(`/api/accounts/${accountId}/entities`).expect(401)
+      })
+    })
+
+    describe('Account Roles Fetch', () => {
+      it('should fetch account roles with pagination', async () => {
+        const response = await agent.get(`/api/accounts/${accountId}/roles`).query({ page: 1, limit: 10 }).expect(200)
+
+        expect(response.body).toMatchObject({
+          items: expect.arrayContaining([
+            expect.objectContaining({
+              id: expect.any(Number),
+              name: expect.any(String),
+              isActive: true
+            })
+          ]),
+          meta: expect.objectContaining({
+            pagination: expect.objectContaining({
+              current: 1,
+              limit: 10,
+              total: expect.any(Number)
+            }),
+            count: expect.any(Number)
+          })
+        })
+      })
+
+      it('should filter roles by name using search', async () => {
+        // First get a role name to search for
+        const roleResponse = await agent.get(`/api/accounts/${accountId}/roles`).expect(200)
+
+        if (roleResponse.body.items.length > 0) {
+          const roleToSearch = roleResponse.body.items[0]
+          const searchTerm = roleToSearch.name.substring(0, 3) // Take first 3 characters for partial match
+
+          const response = await agent.get(`/api/accounts/${accountId}/roles?search=${searchTerm}`).expect(200)
+
+          // Expect at least the role we searched for to be in results
+          expect(response.body.items.some((role) => role.id === roleToSearch.id)).toBe(true)
+        } else {
+          // Skip test if no roles to search
+          console.log('Skipping role search test as no roles were found')
+        }
+      })
+
+      it('should reject fetching account roles without authentication', async () => {
+        await request(app.getHttpServer()).get(`/api/accounts/${accountId}/roles`).expect(401)
       })
     })
   })
