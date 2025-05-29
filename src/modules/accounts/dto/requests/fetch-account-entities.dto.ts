@@ -28,6 +28,10 @@ export class FetchAccountEntitiesDto extends PaginationRequestDto {
   @IsOptional()
   @IsArray()
   @IsUUID(4, { each: true })
+  @Transform(({ value }) => {
+    if (value === undefined || value === null) return undefined
+    return Array.isArray(value) ? value : [value]
+  })
   userIds?: string[]
 
   @ApiProperty({

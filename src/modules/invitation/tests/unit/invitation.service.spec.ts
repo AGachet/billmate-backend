@@ -87,7 +87,14 @@ describe('InvitationService', () => {
     // Mock the transaction function with proper implementation
     mockPrismaService.$transaction = jest.fn().mockImplementation(async (callback) => {
       if (typeof callback === 'function') {
-        return await callback(mockPrismaService)
+        const tx = {
+          ...mockPrismaService,
+          invitation: {
+            ...mockPrismaService.invitation,
+            updateMany: jest.fn().mockResolvedValue({ count: 1 })
+          }
+        }
+        return await callback(tx)
       }
       return Promise.resolve(callback)
     })
@@ -689,8 +696,29 @@ describe('InvitationService', () => {
 
       // Verify
       expect(prismaService.invitation.findMany).toHaveBeenCalledWith({
-        where: { inviterUserId: userId },
-        include: expect.any(Object),
+        where: {
+          inviterUserId: userId,
+          status: {
+            not: 'CANCELED'
+          }
+        },
+        include: {
+          accountsLinked: {
+            include: {
+              account: true
+            }
+          },
+          entitiesLinked: {
+            include: {
+              entity: true
+            }
+          },
+          rolesLinked: {
+            include: {
+              role: true
+            }
+          }
+        },
         orderBy: { invitedAt: 'desc' }
       })
     })
@@ -713,8 +741,29 @@ describe('InvitationService', () => {
       // Act & Assert
       await expect(service.getUserInvitations(userId)).rejects.toThrow(Error)
       expect(prismaService.invitation.findMany).toHaveBeenCalledWith({
-        where: { inviterUserId: userId },
-        include: expect.any(Object),
+        where: {
+          inviterUserId: userId,
+          status: {
+            not: 'CANCELED'
+          }
+        },
+        include: {
+          accountsLinked: {
+            include: {
+              account: true
+            }
+          },
+          entitiesLinked: {
+            include: {
+              entity: true
+            }
+          },
+          rolesLinked: {
+            include: {
+              role: true
+            }
+          }
+        },
         orderBy: { invitedAt: 'desc' }
       })
     })

@@ -1,12 +1,12 @@
 import { PaginatedResponseDto } from '@common/dto/responses/pagination.response.dto'
 import { ApiProperty } from '@nestjs/swagger'
-import { EntityDto } from './fetch_account.response.dto'
+import { EntityWithOrganizationDto } from './fetch_account.response.dto'
 
-export class FetchAccountEntitiesResponseDto extends PaginatedResponseDto<EntityDto> {
+export class FetchAccountEntitiesResponseDto extends PaginatedResponseDto<EntityWithOrganizationDto> {
   @ApiProperty({
     description: 'List of entities',
-    type: [EntityDto],
+    type: [EntityWithOrganizationDto],
     isArray: true
   })
-  items: EntityDto[]
+  items: EntityWithOrganizationDto[]
 }
