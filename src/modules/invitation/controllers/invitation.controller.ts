@@ -1,7 +1,7 @@
 /**
  * Resources
  */
-import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common'
+import { Body, Controller, Get, Post, Req, Res, UseGuards } from '@nestjs/common'
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
 
 /**
@@ -10,8 +10,8 @@ import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
 import { RequirePermissions } from '@common/decorators/require-permissions.decorator'
 import { JwtAuthGuard } from '@modules/auth/guards/jwt-auth.guard'
 import { PermissionsGuard } from '@modules/auth/guards/permissions.guard'
+import { AuthService } from '@modules/auth/services/auth.service'
 import { InvitationService } from '@modules/invitation/services/invitation.service'
-
 /**
  * DTO
  */
@@ -25,7 +25,7 @@ import { ListInvitationsResponseDto } from '@modules/invitation/dto/responses/li
  * Type
  */
 import type { User } from '@prisma/client'
-import type { Request } from 'express'
+import type { Request, Response } from 'express'
 
 // Extend Request type to include user property
 interface AuthenticatedRequest extends Request {
@@ -38,7 +38,10 @@ interface AuthenticatedRequest extends Request {
 @ApiTags('Invitations')
 @Controller('invitations')
 export class InvitationController {
-  constructor(private readonly invitationService: InvitationService) {}
+  constructor(
+    private readonly invitationService: InvitationService,
+    private readonly authService: AuthService
+  ) {}
 
   @Post()
   @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -73,8 +76,9 @@ export class InvitationController {
   @ApiResponse({ status: 400, description: 'Invalid request' })
   @ApiResponse({ status: 404, description: 'Invitation not found or expired' })
   /** End -- Documentation */
-  async acceptInvitation(@Body() acceptInvitationDto: AcceptInvitationDto): Promise<SignInResponseDto> {
-    const result = await this.invitationService.acceptInvitation(acceptInvitationDto)
-    return { userId: result.userId }
+  async acceptInvitation(@Body() acceptInvitationDto: AcceptInvitationDto, @Res({ passthrough: true }) response: Response): Promise<SignInResponseDto> {
+    const { userId, accessToken, refreshToken } = await this.invitationService.acceptInvitation(acceptInvitationDto)
+    this.authService.setAuthCookies(response, accessToken, refreshToken)
+    return { userId }
   }
 }

@@ -3,7 +3,7 @@
  */
 import { INestApplication } from '@nestjs/common'
 import { Test, TestingModule } from '@nestjs/testing'
-import { OrganizationType } from '@prisma/client'
+import { Locale, OrganizationType } from '@prisma/client'
 import cookieParser from 'cookie-parser'
 import * as dotenv from 'dotenv'
 import request from 'supertest'
@@ -75,7 +75,7 @@ describe('Invitation Module (e2e)', () => {
       password: 'TestPassword123',
       firstname: 'Invitation',
       lastname: 'Manager',
-      roles: ['user', 'admin'],
+      roles: ['admin'],
       permissions: ['USER_ACCOUNTS_INVITATION', 'USER_ENTITIES_INVITATION', 'USER_ROLE_ALLOCATION']
     })
 
@@ -136,12 +136,27 @@ describe('Invitation Module (e2e)', () => {
 
   describe('Invitation Creation', () => {
     it('should successfully create an invitation when authenticated', async () => {
-      const dto = createInvitationDto(invitedUserEmail, [testUser.accountId])
+      // Vérifier que le compte existe et est actif
+      const account = await prismaService.account.findUnique({
+        where: { id: testUser.accountId }
+      })
+      expect(account).not.toBeNull()
+      expect(account?.isActive).toBe(true)
+
+      const dto = {
+        email: invitedUserEmail,
+        firstname: 'Test',
+        lastname: 'User',
+        roleIds: [2],
+        accountIds: [testUser.accountId],
+        entityIds: [],
+        locale: Locale.FR
+      }
 
       const response = await agent.post('/api/invitations').send(dto)
 
-      // Accepter 200 ou 201 comme codes de retour valides
-      expect([200, 201]).toContain(response.status)
+      // Vérifier que la réponse est un succès
+      expect(response.status).toBe(201)
 
       expect(response.body).toMatchObject({
         message: expect.stringContaining('Invitation sent successfully')
@@ -151,10 +166,39 @@ describe('Invitation Module (e2e)', () => {
       if (response.body.invitationToken) {
         invitationToken = response.body.invitationToken
       }
+
+      // Vérifier que l'invitation a bien été créée dans la base de données
+      const invitation = await prismaService.invitation.findFirst({
+        where: {
+          inviteeUserEmail: invitedUserEmail,
+          inviterUserId: testUser.id,
+          status: 'SENT'
+        },
+        include: {
+          accountsLinked: true,
+          entitiesLinked: true,
+          rolesLinked: true
+        }
+      })
+
+      expect(invitation).not.toBeNull()
+      expect(invitation?.status).toBe('SENT')
+      expect(invitation?.accountsLinked).toHaveLength(1)
+      expect(invitation?.accountsLinked[0].accountId).toBe(testUser.accountId)
+      expect(invitation?.rolesLinked).toHaveLength(1)
+      expect(invitation?.rolesLinked[0].roleId).toBe(2)
     })
 
     it('should reject invitation creation when not authenticated', async () => {
-      const dto = createInvitationDto(`non-auth-invite-${Date.now()}@billmate.test`, [testUser.accountId])
+      const dto = {
+        email: `non-auth-invite-${Date.now()}@billmate.test`,
+        firstname: 'Test',
+        lastname: 'User',
+        roleIds: [2],
+        accountIds: [testUser.accountId],
+        entityIds: [],
+        locale: Locale.FR
+      }
 
       await request(app.getHttpServer()).post('/api/invitations').send(dto).expect(401)
     })
@@ -165,15 +209,26 @@ describe('Invitation Module (e2e)', () => {
         firstname: 'No',
         lastname: 'Context',
         accountIds: [],
-        entityIds: []
+        entityIds: [],
+        roleIds: [2],
+        locale: Locale.FR
       }
 
-      await agent.post('/api/invitations').send(dto).expect(400)
+      const response = await agent.post('/api/invitations').send(dto)
+      expect(response.status).toBe(400)
+      expect(response.body).toHaveProperty('message')
+      expect(response.body.message).toContain('account or entity')
     })
   })
 
   describe('List User Invitations', () => {
     it('should return user invitations when authenticated', async () => {
+      // S'assurer qu'une invitation existe
+      if (!invitationToken) {
+        const dto = createInvitationDto(`backup-invite-${Date.now()}@billmate.test`, [testUser.accountId])
+        await agent.post('/api/invitations').send(dto)
+      }
+
       const response = await agent.get('/api/invitations')
 
       // Verify successful response
@@ -181,7 +236,7 @@ describe('Invitation Module (e2e)', () => {
       expect(response.body).toHaveProperty('invitations')
       expect(Array.isArray(response.body.invitations)).toBe(true)
 
-      // Our test user should have at least one invitation (the one created in the previous test)
+      // Our test user should have at least one invitation
       expect(response.body.invitations.length).toBeGreaterThan(0)
 
       // Verify invitation structure

@@ -1,27 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger'
 
-export class PeopleDto {
-  @ApiProperty({
-    description: 'People ID',
-    example: '123e4567-e89b-12d3-a456-426614174000'
-  })
-  id: string
-
-  @ApiProperty({
-    description: 'First name',
-    example: 'John',
-    nullable: true
-  })
-  firstname: string | null
-
-  @ApiProperty({
-    description: 'Last name',
-    example: 'Doe',
-    nullable: true
-  })
-  lastname: string | null
-}
-
 export class OrganizationDto {
   @ApiProperty({
     description: 'Organization ID',
@@ -36,7 +14,7 @@ export class OrganizationDto {
   name: string
 }
 
-export class EntityDto {
+export class EntityWithOrganizationDto {
   @ApiProperty({
     description: 'Entity ID',
     example: 'cmagp5dy70001t84nzb9t39j8'
@@ -50,53 +28,11 @@ export class EntityDto {
   name: string
 
   @ApiProperty({
-    description: 'Entity description',
-    example: 'Main office location',
+    description: 'Associated organization',
+    type: OrganizationDto,
     required: false
   })
-  description: string | null
-
-  @ApiProperty({
-    description: 'Entity active status',
-    example: true
-  })
-  isActive: boolean
-
-  @ApiProperty({
-    description: 'Associated organization',
-    required: false,
-    example: {
-      id: 'cmagp5dy70001t84nzb9t39j9',
-      name: 'Acme Corp'
-    }
-  })
   organization: OrganizationDto | null
-
-  @ApiProperty({
-    description: 'Creation date',
-    example: '2024-01-01T00:00:00.000Z'
-  })
-  createdAt: Date
-
-  @ApiProperty({
-    description: 'Last update date',
-    example: '2024-01-01T00:00:00.000Z'
-  })
-  updatedAt: Date
-}
-
-export class UserRoleDto {
-  @ApiProperty({
-    description: 'Role ID',
-    example: 1
-  })
-  id: number
-
-  @ApiProperty({
-    description: 'Role name',
-    example: 'admin'
-  })
-  name: string
 }
 
 export class AccountUserDto {
@@ -148,10 +84,20 @@ export class AccountUserDto {
   }[]
 
   @ApiProperty({
-    description: 'Entity IDs the user is linked to',
-    example: ['cmagp5dy70001t84nzb9t39j8']
+    description: 'Entities the user is linked to',
+    type: [EntityWithOrganizationDto],
+    example: [
+      {
+        id: 'cmagp5dy70001t84nzb9t39j8',
+        name: 'Main Office',
+        organization: {
+          id: 'org123',
+          name: 'Acme Corp'
+        }
+      }
+    ]
   })
-  entityIds: string[]
+  entities: EntityWithOrganizationDto[]
 
   @ApiProperty({
     description: 'Whether the user is directly linked to the account',
@@ -269,20 +215,20 @@ export class FetchAccountDeepResponseDto {
   updatedAt: Date
 
   @ApiProperty({
-    description: 'Users collection',
-    type: () => CollectionResponseDto<AccountUserDto>
+    description: 'Account users',
+    type: CollectionResponseDto<AccountUserDto>
   })
   users: CollectionResponseDto<AccountUserDto>
 
   @ApiProperty({
-    description: 'Entities collection',
-    type: () => CollectionResponseDto<EntityDto>
+    description: 'Account entities',
+    type: CollectionResponseDto<EntityWithOrganizationDto>
   })
-  entities: CollectionResponseDto<EntityDto>
+  entities: CollectionResponseDto<EntityWithOrganizationDto>
 
   @ApiProperty({
-    description: 'Roles collection',
-    type: () => CollectionResponseDto<AccountRoleDto>
+    description: 'Account roles',
+    type: CollectionResponseDto<AccountRoleDto>
   })
   roles: CollectionResponseDto<AccountRoleDto>
 }

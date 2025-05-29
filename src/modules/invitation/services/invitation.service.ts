@@ -3,7 +3,7 @@
  */
 import { BadRequestException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common'
 import { JwtService } from '@nestjs/jwt'
-import { Locale, TokenType } from '@prisma/client'
+import { InvitationStatus, Locale, TokenType } from '@prisma/client'
 import * as bcrypt from 'bcrypt'
 
 /**
@@ -63,7 +63,8 @@ export class InvitationService {
       message: 'Invitation sent successfully. The user will receive an email with instructions to join.'
     }
 
-    const { email, firstname, lastname, roleIds, accountIds = [], entityIds = [], locale } = createInvitationDto
+    const { email, roleIds, accountIds = [], entityIds = [] } = createInvitationDto
+    let { firstname, lastname, locale } = createInvitationDto
 
     this.logger.debug(`Creating invitation for ${email} by user ${inviterId}`, 'createInvitation')
 
@@ -178,7 +179,21 @@ export class InvitationService {
       }
 
       // Check role assignment permission if roleIds are provided
-      if (roleIds && roleIds.length > 0 && !hasRoleAllocationPermission) throw new UnauthorizedException('You do not have permission to assign roles')
+      if (roleIds && roleIds.length > 0) {
+        if (!hasRoleAllocationPermission) throw new UnauthorizedException('You do not have permission to assign roles')
+
+        // Check if any of the roles is 'guest'
+        const guestRole = await this.prisma.role.findFirst({
+          where: {
+            id: { in: roleIds },
+            name: 'guest'
+          }
+        })
+
+        if (guestRole) {
+          throw new BadRequestException('The guest role cannot be assigned to users')
+        }
+      }
 
       // Check if the email already exists
       const existingUser = await this.prisma.user.findUnique({ where: { email } })
@@ -190,11 +205,60 @@ export class InvitationService {
 
       // Use existing user or create a new one if none exists
       let user: User
+      let previousAccountIds: string[] = []
+      let previousEntityIds: string[] = []
+      let previousRoleIds: number[] = []
 
       if (existingUser) {
         // Re-using existing inactive user - just create a new invitation token
         this.logger.debug(`Re-inviting existing inactive user: ${email}`, 'createInvitation')
         user = existingUser
+
+        // Récupérer l'invitation précédente avec ses liens
+        const previousInvitation = await this.prisma.invitation.findFirst({
+          where: {
+            inviteeUserEmail: email,
+            status: InvitationStatus.SENT
+          },
+          include: {
+            accountsLinked: true,
+            entitiesLinked: true,
+            rolesLinked: true
+          }
+        })
+
+        if (previousInvitation) {
+          // Récupérer les IDs des liens précédents
+          previousAccountIds = previousInvitation.accountsLinked.map((link) => link.accountId)
+          previousEntityIds = previousInvitation.entitiesLinked.map((link) => link.entityId)
+          previousRoleIds = previousInvitation.rolesLinked.map((link) => link.roleId)
+        }
+
+        // Récupérer le token précédent pour conserver les informations
+        const previousToken = await this.prisma.userToken.findFirst({
+          where: {
+            userId: user.id,
+            type: TokenType.INVITATION
+          },
+          orderBy: {
+            createdAt: 'desc'
+          }
+        })
+
+        if (previousToken) {
+          try {
+            const previousPayload = this.jwtService.verify(previousToken.token, {
+              secret: this.env.get('JWT_SECRET_INVITATION')
+            }) as InvitationTokenPayload
+
+            // Utiliser les informations du token précédent si non fournies dans la nouvelle invitation
+            firstname = firstname || previousPayload.firstname
+            lastname = lastname || previousPayload.lastname
+            locale = locale || previousPayload.locale
+          } catch (error) {
+            this.logger.warn(`Could not decode previous invitation token: ${error.message}`, 'createInvitation')
+          }
+        }
       } else {
         // Create a new inactive user
         user = await this.prisma.user.create({
@@ -236,19 +300,34 @@ export class InvitationService {
       }
 
       await this.prisma.$transaction(async (tx) => {
+        await tx.invitation.updateMany({
+          where: {
+            inviteeUserEmail: email,
+            status: InvitationStatus.SENT
+          },
+          data: {
+            status: InvitationStatus.CANCELED
+          }
+        })
+
         // Create the invitation
         const invitation = await tx.invitation.create({
           data: {
             inviterUserId: inviterId,
             inviteeUserEmail: email,
-            status: 'SENT'
+            status: InvitationStatus.SENT
           }
         })
 
+        // Utiliser les nouveaux IDs s'ils sont fournis, sinon utiliser les précédents
+        const finalAccountIds = accountIds.length > 0 ? accountIds : previousAccountIds
+        const finalEntityIds = entityIds.length > 0 ? entityIds : previousEntityIds
+        const finalRoleIds = roleIds && roleIds.length > 0 ? roleIds : previousRoleIds
+
         // Create the links with the accounts
-        if (accountIds.length > 0) {
+        if (finalAccountIds.length > 0) {
           await tx.invitationAccountLink.createMany({
-            data: accountIds.map((accountId) => ({
+            data: finalAccountIds.map((accountId) => ({
               invitationId: invitation.id,
               accountId
             }))
@@ -256,9 +335,9 @@ export class InvitationService {
         }
 
         // Create the links with the entities
-        if (entityIds.length > 0) {
+        if (finalEntityIds.length > 0) {
           await tx.invitationEntityLink.createMany({
-            data: entityIds.map((entityId) => ({
+            data: finalEntityIds.map((entityId) => ({
               invitationId: invitation.id,
               entityId
             }))
@@ -266,9 +345,9 @@ export class InvitationService {
         }
 
         // Create the links with the roles
-        if (roleIds && roleIds.length > 0) {
+        if (finalRoleIds.length > 0) {
           await tx.invitationRoleLink.createMany({
-            data: roleIds.map((roleId) => ({
+            data: finalRoleIds.map((roleId) => ({
               invitationId: invitation.id,
               roleId
             }))
@@ -316,7 +395,7 @@ export class InvitationService {
       const invitation = await this.prisma.invitation.findFirst({
         where: {
           inviteeUserEmail: tokenRecord.user.email,
-          status: 'SENT'
+          status: InvitationStatus.SENT
         },
         include: {
           accountsLinked: true,
@@ -359,7 +438,7 @@ export class InvitationService {
       await this.prisma.invitation.update({
         where: { id: invitation.id },
         data: {
-          status: 'ACCEPTED',
+          status: InvitationStatus.ACCEPTED,
           inviteeUserId: tokenRecord.user.id,
           acceptedAt: new Date()
         }
@@ -396,7 +475,10 @@ export class InvitationService {
     // Get all invitations sent by the user with related accounts, entities, and roles
     const invitations = await this.prisma.invitation.findMany({
       where: {
-        inviterUserId: userId
+        inviterUserId: userId,
+        status: {
+          not: InvitationStatus.CANCELED
+        }
       },
       include: {
         accountsLinked: {

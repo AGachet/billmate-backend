@@ -80,7 +80,7 @@ export class EmailService {
   async sendInvitationEmail(email: string, invitationToken: string, inviterName?: string, inviteeName?: string, locale: Locale = UserDefaults.preferences.locale): Promise<void> {
     try {
       this.logger.log(`Sending invitation email to ${email}`)
-      const invitationUrl = `${this.envConfig.get('FRONTEND_URL')}/accept-invitation?invitationToken=${invitationToken}`
+      const invitationUrl = `${this.envConfig.get('FRONTEND_URL')}/user-invitation?invitationToken=${invitationToken}`
       const html = getInvitationHtmlTemplate(invitationUrl, this.translationService, locale, inviterName, inviteeName)
       const text = getInvitationTextTemplate(invitationUrl, this.translationService, locale, inviterName, inviteeName)
 

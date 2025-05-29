@@ -1,7 +1,7 @@
 import { PaginationRequestDto } from '@common/dto/requests/pagination.request.dto'
 import { ApiProperty } from '@nestjs/swagger'
 import { Transform, Type } from 'class-transformer'
-import { IsArray, IsBoolean, IsEnum, IsOptional, IsString, IsUUID } from 'class-validator'
+import { IsArray, IsBoolean, IsEnum, IsOptional, IsString } from 'class-validator'
 
 export enum UserOrderBy {
   CREATED_AT = 'createdAt',
@@ -28,6 +28,10 @@ export class FetchAccountUsersDto extends PaginationRequestDto {
   @IsOptional()
   @IsArray()
   @Type(() => Number)
+  @Transform(({ value }) => {
+    if (value === undefined || value === null) return undefined
+    return Array.isArray(value) ? value : [value]
+  })
   roleIds?: number[]
 
   @ApiProperty({
@@ -37,7 +41,11 @@ export class FetchAccountUsersDto extends PaginationRequestDto {
   })
   @IsOptional()
   @IsArray()
-  @IsUUID(4, { each: true })
+  @Type(() => String)
+  @Transform(({ value }) => {
+    if (value === undefined || value === null) return undefined
+    return Array.isArray(value) ? value : [value]
+  })
   entityIds?: string[]
 
   @ApiProperty({
