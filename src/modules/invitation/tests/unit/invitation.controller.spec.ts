@@ -11,6 +11,7 @@ import { Locale } from '@prisma/client'
  */
 import { JwtAuthGuard } from '@modules/auth/guards/jwt-auth.guard'
 import { PermissionsGuard } from '@modules/auth/guards/permissions.guard'
+import { AuthService } from '@modules/auth/services/auth.service'
 import { InvitationController } from '@modules/invitation/controllers/invitation.controller'
 import { InvitationService } from '@modules/invitation/services/invitation.service'
 
@@ -32,6 +33,7 @@ import { clearAllMocks } from '@common/tests/unit/utils/test-utils'
 describe('InvitationController', () => {
   let controller: InvitationController
   let invitationService: jest.Mocked<InvitationService>
+  let module: TestingModule
 
   // Mock authenticated request
   const mockRequest = {
@@ -50,12 +52,22 @@ describe('InvitationController', () => {
 
     // No need to include JwtAuthGuard or PermissionsGuard for unit tests
     // We are simply testing that the controller calls the correct methods of the service
-    const module: TestingModule = await Test.createTestingModule({
+    module = await Test.createTestingModule({
       controllers: [InvitationController],
       providers: [
         {
           provide: InvitationService,
           useValue: mockInvitationService
+        },
+        {
+          provide: AuthService,
+          useValue: {
+            getMe: jest.fn(),
+            createUniqueToken: jest.fn(),
+            generateTokens: jest.fn(),
+            createAndActivateUserProfile: jest.fn(),
+            setAuthCookies: jest.fn()
+          }
         }
       ]
     })
@@ -116,14 +128,20 @@ describe('InvitationController', () => {
         refreshToken: 'refresh-token'
       }
 
+      const mockResponse = {
+        cookie: jest.fn(),
+        clearCookie: jest.fn()
+      }
+
       invitationService.acceptInvitation.mockResolvedValue(serviceResponse)
 
       // Act
-      const result = await controller.acceptInvitation(dto)
+      const result = await controller.acceptInvitation(dto, mockResponse)
 
       // Assert
       expect(invitationService.acceptInvitation).toHaveBeenCalledWith(dto)
       expect(result).toEqual({ userId: serviceResponse.userId })
+      expect(module.get(AuthService).setAuthCookies).toHaveBeenCalledWith(mockResponse, serviceResponse.accessToken, serviceResponse.refreshToken)
     })
   })
 

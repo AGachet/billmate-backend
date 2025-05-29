@@ -5,6 +5,7 @@ enum InvitationStatus {
   SENT
   EXPIRED
   ACCEPTED
+  CANCELED
 
   @@map("invitation_status")
 }

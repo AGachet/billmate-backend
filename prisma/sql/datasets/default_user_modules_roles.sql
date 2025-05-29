@@ -39,6 +39,7 @@ VALUES
   -- account_administration module permissions
   ((SELECT id FROM public.modules WHERE name = 'ACCOUNT_ADMINISTRATION'), 'ACCOUNT_UPDATE', 'Update an account', NOW()),
   ((SELECT id FROM public.modules WHERE name = 'ACCOUNT_ADMINISTRATION'), 'ACCOUNT_USER_MANAGEMENT', 'Manage account users', NOW()),
+  ((SELECT id FROM public.modules WHERE name = 'ACCOUNT_ADMINISTRATION'), 'ACCOUNT_ENTITY_MANAGEMENT', 'Manage account entities', NOW()),
   ((SELECT id FROM public.modules WHERE name = 'ACCOUNT_ADMINISTRATION'), 'USER_ACCOUNTS_INVITATION', 'Invite users to an account', NOW()),
   ((SELECT id FROM public.modules WHERE name = 'ACCOUNT_ADMINISTRATION'), 'USER_ENTITIES_INVITATION', 'Invite users to an entity', NOW()),
   ((SELECT id FROM public.modules WHERE name = 'ACCOUNT_ADMINISTRATION'), 'USER_ROLE_ALLOCATION', 'Allocate roles to users', NOW()),
@@ -79,6 +80,7 @@ VALUES
   ((SELECT id FROM public.roles WHERE name = 'admin'), (SELECT id FROM public.module_permissions WHERE name = 'PASSWORD_RECOVERY_RESET_OWN'), NOW()),
   ((SELECT id FROM public.roles WHERE name = 'admin'), (SELECT id FROM public.module_permissions WHERE name = 'ACCOUNT_UPDATE'), NOW()),
   ((SELECT id FROM public.roles WHERE name = 'admin'), (SELECT id FROM public.module_permissions WHERE name = 'ACCOUNT_USER_MANAGEMENT'), NOW()),
+  ((SELECT id FROM public.roles WHERE name = 'admin'), (SELECT id FROM public.module_permissions WHERE name = 'ACCOUNT_ENTITY_MANAGEMENT'), NOW()),
   ((SELECT id FROM public.roles WHERE name = 'admin'), (SELECT id FROM public.module_permissions WHERE name = 'ENTITY_CREATION'), NOW()),
   ((SELECT id FROM public.roles WHERE name = 'admin'), (SELECT id FROM public.module_permissions WHERE name = 'USER_ACCOUNTS_INVITATION'), NOW()),
   ((SELECT id FROM public.roles WHERE name = 'admin'), (SELECT id FROM public.module_permissions WHERE name = 'USER_ENTITIES_INVITATION'), NOW()),

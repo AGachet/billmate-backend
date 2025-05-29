@@ -405,6 +405,7 @@ export class AuthService {
           id: link.entity.id,
           name: link.entity.name,
           isActive: link.entity.isActive,
+          accountId: link.entity.accountId,
           organization: null
         }
 
@@ -421,9 +422,11 @@ export class AuthService {
 
       return {
         userId: user.id,
-        firstname: user.people?.firstname || null,
-        lastname: user.people?.lastname || null,
         email: user.email,
+        people: {
+          firstname: user.people?.firstname || null,
+          lastname: user.people?.lastname || null
+        },
         roles,
         modules,
         permissions,

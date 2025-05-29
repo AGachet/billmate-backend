@@ -42,6 +42,22 @@ export class OrganizationDto {
   name: string
 }
 
+export class PeopleDto {
+  @ApiProperty({
+    description: 'First name',
+    example: 'John',
+    nullable: true
+  })
+  firstname: string | null
+
+  @ApiProperty({
+    description: 'Last name',
+    example: 'Doe',
+    nullable: true
+  })
+  lastname: string | null
+}
+
 export class EntityDto {
   @ApiProperty({
     description: 'Entity unique identifier',
@@ -60,6 +76,12 @@ export class EntityDto {
     example: true
   })
   isActive: boolean
+
+  @ApiProperty({
+    description: 'Account ID this entity belongs to',
+    example: '123e4567-e89b-12d3-a456-426614174000'
+  })
+  accountId: string
 
   @ApiProperty({
     description: 'Organization information',
@@ -83,18 +105,10 @@ export class MeResponseDto {
   email: string
 
   @ApiProperty({
-    description: 'User first name',
-    example: 'John',
-    nullable: true
+    description: 'User personal information',
+    type: PeopleDto
   })
-  firstname: string | null
-
-  @ApiProperty({
-    description: 'User last name',
-    example: 'Doe',
-    nullable: true
-  })
-  lastname: string | null
+  people: PeopleDto
 
   @ApiProperty({
     description: 'User roles',

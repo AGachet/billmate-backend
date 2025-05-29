@@ -83,7 +83,11 @@ export class AccountService {
             },
             entitiesLinked: {
               include: {
-                entity: true
+                entity: {
+                  include: {
+                    organization: true
+                  }
+                }
               }
             },
             accountsLinked: {
@@ -165,7 +169,18 @@ export class AccountService {
 
       // Process users data
       const processedUsers = users.map((user) => {
-        const userEntityIds = user.entitiesLinked.filter((entityLink) => entityLink.entity && entityLink.entity.accountId === accountId).map((entityLink) => entityLink.entity.id)
+        const userEntities = user.entitiesLinked
+          .filter((entityLink) => entityLink.entity && entityLink.entity.accountId === accountId)
+          .map((entityLink) => ({
+            id: entityLink.entity.id,
+            name: entityLink.entity.name,
+            organization: entityLink.entity.organization
+              ? {
+                  id: entityLink.entity.organization.id,
+                  name: entityLink.entity.organization.name
+                }
+              : null
+          }))
 
         return {
           id: user.id,
@@ -182,7 +197,7 @@ export class AccountService {
             id: roleLink.role.id,
             name: roleLink.role.name
           })),
-          entityIds: userEntityIds,
+          entities: userEntities,
           isDirectlyLinked: user.accountsLinked.length > 0,
           createdAt: user.createdAt,
           updatedAt: user.updatedAt
@@ -391,21 +406,19 @@ export class AccountService {
     }
   }
 
-  public async fetchAccountUsers(userId: string, accountId: string, dto: FetchAccountUsersDto): Promise<FetchAccountUsersResponseDto> {
-    this.logger.debug(`Fetching users for account ${accountId} with filters`, 'fetchAccountUsers')
+  public async fetchAccountUsers(userId: string, accountId: string, filters: FetchAccountUsersDto): Promise<FetchAccountUsersResponseDto> {
+    this.logger.debug(`Fetching users for account ${accountId} with filters ${JSON.stringify(filters)}`, 'fetchAccountUsers')
 
     try {
       // Verify that the user has access to the account
       await this.accountAccessService.validateUserAccountAccess(userId, accountId, 'fetchAccountUsers')
 
       // Build base query for filtering
-      const baseWhereClause: Prisma.UserWhereInput = {
-        OR: []
-      }
+      const accessConditions: Prisma.UserWhereInput[] = []
 
       // Include directly linked users if requested
-      if (dto.includeDirectUsers !== false) {
-        baseWhereClause.OR?.push({
+      if (filters.includeDirectUsers !== false) {
+        accessConditions.push({
           accountsLinked: {
             some: {
               accountId
@@ -426,60 +439,71 @@ export class AccountService {
       }
 
       // Apply entity filter if provided
-      if (dto.entityIds && dto.entityIds.length > 0) {
+      if (filters.entityIds && filters.entityIds.length > 0) {
         entityClause.entitiesLinked = {
           some: {
             entity: {
               accountId,
               id: {
-                in: dto.entityIds
+                in: filters.entityIds
               }
             }
           }
         }
       }
 
-      baseWhereClause.OR?.push(entityClause)
+      accessConditions.push(entityClause)
 
-      // Apply text search filter if provided
-      if (dto.search) {
-        const searchTerm = dto.search
-        baseWhereClause.OR = [
-          ...(baseWhereClause.OR || []),
-          {
-            email: {
-              contains: searchTerm,
-              mode: 'insensitive'
-            }
-          },
-          {
-            people: {
-              OR: [
-                {
-                  firstname: {
-                    contains: searchTerm,
-                    mode: 'insensitive'
+      // Build search conditions if provided
+      let searchConditions: Prisma.UserWhereInput | undefined
+      if (filters.search) {
+        const searchTerm = filters.search
+        this.logger.debug(`Search term: ${searchTerm}`, 'fetchAccountUsers')
+        searchConditions = {
+          OR: [
+            {
+              email: {
+                contains: searchTerm,
+                mode: 'insensitive'
+              }
+            },
+            {
+              people: {
+                OR: [
+                  {
+                    firstname: {
+                      contains: searchTerm,
+                      mode: 'insensitive'
+                    }
+                  },
+                  {
+                    lastname: {
+                      contains: searchTerm,
+                      mode: 'insensitive'
+                    }
                   }
-                },
-                {
-                  lastname: {
-                    contains: searchTerm,
-                    mode: 'insensitive'
-                  }
-                }
-              ]
+                ]
+              }
             }
-          }
-        ]
+          ]
+        }
+        this.logger.debug(`Search conditions: ${JSON.stringify(searchConditions)}`, 'fetchAccountUsers')
       }
 
+      // Combine all conditions
+      const baseWhereClause: Prisma.UserWhereInput = {
+        AND: [{ OR: accessConditions }, ...(searchConditions ? [searchConditions] : [])]
+      }
+
+      this.logger.debug(`Final query: ${JSON.stringify(baseWhereClause)}`, 'fetchAccountUsers')
+
       // Apply role filter if provided
-      if (dto.roleIds && dto.roleIds.length > 0) {
+      if (filters.roleIds && filters.roleIds.length > 0) {
         baseWhereClause.rolesLinked = {
           some: {
             role: {
               id: {
-                in: dto.roleIds
+                in: filters.roleIds
               }
             }
           }
@@ -487,8 +511,8 @@ export class AccountService {
       }
 
       // Apply active status filter if provided
-      if (dto.isActive !== undefined) {
-        baseWhereClause.isActive = dto.isActive
+      if (filters.isActive !== undefined) {
+        baseWhereClause.isActive = filters.isActive
       }
 
       // Get users and count in parallel
@@ -504,7 +528,11 @@ export class AccountService {
             },
             entitiesLinked: {
               include: {
-                entity: true
+                entity: {
+                  include: {
+                    organization: true
+                  }
+                }
               }
             },
             accountsLinked: {
@@ -513,9 +541,9 @@ export class AccountService {
               }
             }
           },
-          orderBy: this.getUserOrderBy(dto.orderBy),
-          skip: this.paginationService.getOffset(dto),
-          take: dto.limit
+          orderBy: this.getUserOrderBy(filters.orderBy),
+          skip: this.paginationService.getOffset(filters),
+          take: filters.limit
         }),
         this.prisma.user.count({
           where: baseWhereClause
@@ -524,7 +552,18 @@ export class AccountService {
 
       // Process users data
       const userData = users.map((user) => {
-        const userEntityIds = user.entitiesLinked.filter((entityLink) => entityLink.entity && entityLink.entity.accountId === accountId).map((entityLink) => entityLink.entity.id)
+        const userEntities = user.entitiesLinked
+          .filter((entityLink) => entityLink.entity && entityLink.entity.accountId === accountId)
+          .map((entityLink) => ({
+            id: entityLink.entity.id,
+            name: entityLink.entity.name,
+            organization: entityLink.entity.organization
+              ? {
+                  id: entityLink.entity.organization.id,
+                  name: entityLink.entity.organization.name
+                }
+              : null
+          }))
 
         return {
           id: user.id,
@@ -541,14 +580,14 @@ export class AccountService {
             id: roleLink.role.id,
             name: roleLink.role.name
           })),
-          entityIds: userEntityIds,
+          entities: userEntities,
           isDirectlyLinked: user.accountsLinked.length > 0,
           createdAt: user.createdAt,
           updatedAt: user.updatedAt
         }
       })
 
-      return this.paginationService.createPaginatedResponse(userData, dto, total)
+      return this.paginationService.createPaginatedResponse(userData, filters, total)
     } catch (error) {
       if (error instanceof NotFoundException || error instanceof UnauthorizedException) throw error
       this.logger.error(`Failed to fetch users for account ${accountId}: ${error.message}`, 'fetchAccountUsers')
@@ -604,6 +643,12 @@ export class AccountService {
         whereClause.OR = [
           {
             name: {
+              contains: searchTerm,
+              mode: 'insensitive'
+            }
+          },
+          {
+            description: {
               contains: searchTerm,
               mode: 'insensitive'
             }
@@ -679,41 +724,11 @@ export class AccountService {
       // Apply text search filter if provided
       if (dto.search) {
         const searchTerm = dto.search
-        whereClause.OR = [
-          { accountId },
-          { accountId: null },
+        whereClause.AND = [
           {
             name: {
               contains: searchTerm,
               mode: 'insensitive'
-            }
-          },
-          {
-            description: {
-              contains: searchTerm,
-              mode: 'insensitive'
-            }
-          },
-          {
-            permissionsLinked: {
-              some: {
-                permission: {
-                  OR: [
-                    {
-                      name: {
-                        contains: searchTerm,
-                        mode: 'insensitive'
-                      }
-                    },
-                    {
-                      description: {
-                        contains: searchTerm,
-                        mode: 'insensitive'
-                      }
-                    }
-                  ]
-                }
-              }
             }
           }
         ]

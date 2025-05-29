@@ -214,16 +214,17 @@ describe('Auth Module (e2e)', () => {
       const response = await agent.get('/api/auth/me').expect(200)
 
       expect(response.body).toHaveProperty('userId')
-      expect(response.body).toHaveProperty('firstname')
-      expect(response.body).toHaveProperty('lastname')
+      expect(response.body).toHaveProperty('people')
+      expect(response.body.people).toHaveProperty('firstname')
+      expect(response.body.people).toHaveProperty('lastname')
       expect(response.body).toHaveProperty('roles')
       expect(response.body).toHaveProperty('accounts')
       expect(response.body).toHaveProperty('permissions')
       expect(response.body).toHaveProperty('modules')
 
       expect(response.body.userId).toBe(userId)
-      expect(response.body.firstname).toBe(testUser.firstname)
-      expect(response.body.lastname).toBe(testUser.lastname)
+      expect(response.body.people.firstname).toBe(testUser.firstname)
+      expect(response.body.people.lastname).toBe(testUser.lastname)
       expect(response.body.email).toBe(testUser.email)
       expect(response.body.roles).toEqual(['admin'])
 

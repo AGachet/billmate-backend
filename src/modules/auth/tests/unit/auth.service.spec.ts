@@ -519,8 +519,10 @@ describe('AuthService', () => {
         expect(result).toEqual({
           userId: mockUser.id,
           email: mockUser.email,
-          firstname: 'Bruce',
-          lastname: 'Wayne',
+          people: {
+            firstname: 'Bruce',
+            lastname: 'Wayne'
+          },
           roles: ['USER'],
           modules: ['USER_ACCOUNT'],
           permissions: ['READ_OWN_PROFILE'],
