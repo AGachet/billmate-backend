@@ -1,9 +1,7 @@
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-nocheck
 /**
- * Unit tests for ExpiredInvitationsSchedulerService
+ * Resources
  */
-import { Test, TestingModule } from '@nestjs/testing'
+import { Provider } from '@nestjs/common'
 
 /**
  * Dependencies
@@ -13,162 +11,195 @@ import { PrismaService } from '@configs/prisma/services/prisma.service'
 import { ExpiredInvitationsSchedulerService } from '@modules/invitation/services/expired-invitations-scheduler.service'
 
 /**
- * Test utilities and mocks
+ * Test infrastructure
  */
+import { ServiceTestBase } from '@common/tests/unit/base/service-test-base'
 import { mockLogger, mockPrismaService } from '@common/tests/unit/mocks/service-mocks'
-import { clearAllMocks } from '@common/tests/unit/utils/test-utils'
+import { MockManager, TestScenario } from '@common/tests/unit/utils/advanced-test-utils'
 
 /**
- * Test suite
+ * Test implementation using the new infrastructure
  */
-describe('ExpiredInvitationsSchedulerService', () => {
-  let service: ExpiredInvitationsSchedulerService
-  let prismaService: jest.Mocked<PrismaService>
-  let logger: jest.Mocked<Logger>
+class ExpiredInvitationsSchedulerServiceTest extends ServiceTestBase<ExpiredInvitationsSchedulerService> {
+  private mockManager = new MockManager()
+  private logger: jest.Mocked<Logger>
+  private prismaService: jest.Mocked<PrismaService>
 
-  beforeEach(async () => {
-    clearAllMocks()
+  protected getServiceClass() {
+    return ExpiredInvitationsSchedulerService
+  }
 
-    // Mock the necessary Prisma methods
-    mockPrismaService.userToken = {
+  protected getProviders(): Provider[] {
+    return [
+      { provide: PrismaService, useValue: mockPrismaService },
+      { provide: Logger, useValue: mockLogger }
+    ]
+  }
+
+  protected async customSetup(): Promise<void> {
+    // Configure additional Prisma mocks with proper typing
+    const prismaServiceAny = mockPrismaService as any // eslint-disable-line @typescript-eslint/no-explicit-any
+    prismaServiceAny.userToken = {
       findMany: jest.fn(),
       delete: jest.fn(),
       findFirst: jest.fn()
     }
-
-    mockPrismaService.invitation = {
+    prismaServiceAny.invitation = {
       findFirst: jest.fn(),
       update: jest.fn()
     }
 
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        ExpiredInvitationsSchedulerService,
+    // Get service references
+    this.logger = this.getService(Logger)
+    this.prismaService = this.getService(PrismaService)
+  }
+
+  /**
+   * Test handleExpiredInvitations functionality
+   */
+  testHandleExpiredInvitations(): void {
+    describe('handleExpiredInvitations', () => {
+      const mockExpiredTokens = [
         {
-          provide: PrismaService,
-          useValue: mockPrismaService
-        },
-        {
-          provide: Logger,
-          useValue: mockLogger
-        }
-      ]
-    }).compile()
-
-    service = module.get<ExpiredInvitationsSchedulerService>(ExpiredInvitationsSchedulerService)
-    prismaService = module.get(PrismaService)
-    logger = module.get(Logger)
-  })
-
-  describe('handleExpiredInvitations', () => {
-    const mockExpiredTokens = [
-      {
-        id: '1',
-        userId: 'user-1',
-        token: 'expired-token-1',
-        user: {
-          email: 'expired1@test.com'
-        }
-      },
-      {
-        id: '2',
-        userId: 'user-2',
-        token: 'expired-token-2',
-        user: {
-          email: 'expired2@test.com'
-        }
-      }
-    ]
-
-    it('should mark expired invitations and delete expired tokens', async () => {
-      // Arrange
-      prismaService.userToken.findMany.mockResolvedValue(mockExpiredTokens)
-
-      // Mock invitation for first token
-      prismaService.invitation.findFirst
-        .mockResolvedValueOnce({ id: 'invitation-1', status: 'SENT' })
-        // Mock invitation for second token
-        .mockResolvedValueOnce({ id: 'invitation-2', status: 'SENT' })
-
-      // Act
-      await service.handleExpiredInvitations()
-
-      // Assert
-      // Verify that it found all expired tokens
-      expect(prismaService.userToken.findMany).toHaveBeenCalledWith({
-        where: {
-          type: 'INVITATION',
-          expiresAt: {
-            lt: expect.any(Date)
+          id: '1',
+          userId: 'user-1',
+          token: 'expired-token-1',
+          user: {
+            email: 'expired1@test.com'
           }
         },
-        select: expect.any(Object)
-      })
-
-      // Verify that it processed each token
-      expect(prismaService.invitation.findFirst).toHaveBeenCalledTimes(2)
-      expect(prismaService.invitation.update).toHaveBeenCalledTimes(2)
-      expect(prismaService.userToken.delete).toHaveBeenCalledTimes(2)
-
-      // Verify specific calls for the first invitation
-      expect(prismaService.invitation.findFirst).toHaveBeenCalledWith({
-        where: {
-          inviteeUserEmail: 'expired1@test.com',
-          status: 'SENT'
+        {
+          id: '2',
+          userId: 'user-2',
+          token: 'expired-token-2',
+          user: {
+            email: 'expired2@test.com'
+          }
         }
+      ]
+
+      describe('when successful', () => {
+        const successScenario = TestScenario.create('successful handling', async () => {
+          const prismaServiceAny = this.prismaService as any // eslint-disable-line @typescript-eslint/no-explicit-any
+          prismaServiceAny.userToken.findMany.mockResolvedValue(mockExpiredTokens)
+          prismaServiceAny.invitation.findFirst.mockResolvedValueOnce({ id: 'invitation-1', status: 'SENT' }).mockResolvedValueOnce({ id: 'invitation-2', status: 'SENT' })
+        })
+
+        it('should mark expired invitations and delete expired tokens', async () => {
+          await successScenario.execute(async () => {
+            // Act
+            await this.service.handleExpiredInvitations()
+
+            // Assert
+            const prismaServiceAny = this.prismaService as any // eslint-disable-line @typescript-eslint/no-explicit-any
+            expect(prismaServiceAny.userToken.findMany).toHaveBeenCalledWith({
+              where: {
+                type: 'INVITATION',
+                expiresAt: {
+                  lt: expect.any(Date)
+                }
+              },
+              select: expect.any(Object)
+            })
+
+            expect(prismaServiceAny.invitation.findFirst).toHaveBeenCalledTimes(2)
+            expect(prismaServiceAny.invitation.update).toHaveBeenCalledTimes(2)
+            expect(prismaServiceAny.userToken.delete).toHaveBeenCalledTimes(2)
+
+            expect(prismaServiceAny.invitation.findFirst).toHaveBeenCalledWith({
+              where: {
+                inviteeUserEmail: 'expired1@test.com',
+                status: 'SENT'
+              }
+            })
+            expect(prismaServiceAny.invitation.update).toHaveBeenCalledWith({
+              where: { id: 'invitation-1' },
+              data: { status: 'EXPIRED' }
+            })
+            expect(prismaServiceAny.userToken.delete).toHaveBeenCalledWith({
+              where: { id: '1' }
+            })
+
+            expect(this.logger.debug).toHaveBeenCalledWith('Checking for expired invitations...', 'ExpiredInvitationsSchedulerService')
+            expect(this.logger.debug).toHaveBeenCalledWith('Found 2 expired invitation tokens', 'ExpiredInvitationsSchedulerService')
+            expect(this.logger.debug).toHaveBeenCalledWith('Finished checking for expired invitations', 'ExpiredInvitationsSchedulerService')
+          })
+        })
       })
-      expect(prismaService.invitation.update).toHaveBeenCalledWith({
-        where: { id: 'invitation-1' },
-        data: { status: 'EXPIRED' }
+
+      describe('when no invitations found', () => {
+        const noInvitationsScenario = TestScenario.create('no invitations found', async () => {
+          const prismaServiceAny = this.prismaService as any // eslint-disable-line @typescript-eslint/no-explicit-any
+          prismaServiceAny.userToken.findMany.mockResolvedValue([mockExpiredTokens[0]])
+          prismaServiceAny.invitation.findFirst.mockResolvedValue(null)
+        })
+
+        it('should skip invitations that are not found', async () => {
+          await noInvitationsScenario.execute(async () => {
+            // Act
+            await this.service.handleExpiredInvitations()
+
+            // Assert
+            const prismaServiceAny = this.prismaService as any // eslint-disable-line @typescript-eslint/no-explicit-any
+            expect(prismaServiceAny.invitation.update).not.toHaveBeenCalled()
+            expect(prismaServiceAny.userToken.delete).not.toHaveBeenCalled()
+          })
+        })
       })
-      expect(prismaService.userToken.delete).toHaveBeenCalledWith({
-        where: { id: '1' }
+
+      describe('when no expired tokens', () => {
+        const noTokensScenario = TestScenario.create('no expired tokens', async () => {
+          const prismaServiceAny = this.prismaService as any // eslint-disable-line @typescript-eslint/no-explicit-any
+          prismaServiceAny.userToken.findMany.mockResolvedValue([])
+        })
+
+        it('should handle no expired tokens gracefully', async () => {
+          await noTokensScenario.execute(async () => {
+            // Act
+            await this.service.handleExpiredInvitations()
+
+            // Assert
+            const prismaServiceAny = this.prismaService as any // eslint-disable-line @typescript-eslint/no-explicit-any
+            expect(prismaServiceAny.invitation.findFirst).not.toHaveBeenCalled()
+            expect(prismaServiceAny.invitation.update).not.toHaveBeenCalled()
+            expect(prismaServiceAny.userToken.delete).not.toHaveBeenCalled()
+            expect(this.logger.debug).toHaveBeenCalledWith('Found 0 expired invitation tokens', 'ExpiredInvitationsSchedulerService')
+          })
+        })
       })
 
-      // Verify log messages
-      expect(logger.debug).toHaveBeenCalledWith('Checking for expired invitations...', 'ExpiredInvitationsSchedulerService')
-      expect(logger.debug).toHaveBeenCalledWith('Found 2 expired invitation tokens', 'ExpiredInvitationsSchedulerService')
-      expect(logger.debug).toHaveBeenCalledWith('Finished checking for expired invitations', 'ExpiredInvitationsSchedulerService')
+      describe('when database error occurs', () => {
+        const databaseErrorScenario = TestScenario.create('database error', async () => {
+          const prismaServiceAny = this.prismaService as any // eslint-disable-line @typescript-eslint/no-explicit-any
+          prismaServiceAny.userToken.findMany.mockRejectedValue(new Error('Database connection error'))
+        })
+
+        it('should handle database errors gracefully', async () => {
+          await databaseErrorScenario.execute(async () => {
+            // Act
+            await this.service.handleExpiredInvitations()
+
+            // Assert
+            expect(this.logger.error).toHaveBeenCalledWith('Error checking for expired invitations: Database connection error', 'ExpiredInvitationsSchedulerService')
+          })
+        })
+      })
     })
+  }
+}
 
-    it('should skip invitations that are not found', async () => {
-      // Arrange
-      prismaService.userToken.findMany.mockResolvedValue([mockExpiredTokens[0]])
-      // No invitation found for this token
-      prismaService.invitation.findFirst.mockResolvedValue(null)
+// Execute the tests
+describe('ExpiredInvitationsSchedulerService (Refactored)', () => {
+  const expiredInvitationsSchedulerServiceTest = new ExpiredInvitationsSchedulerServiceTest()
 
-      // Act
-      await service.handleExpiredInvitations()
-
-      // Assert
-      // Invitation update and token delete should not be called
-      expect(prismaService.invitation.update).not.toHaveBeenCalled()
-      expect(prismaService.userToken.delete).not.toHaveBeenCalled()
-    })
-
-    it('should handle no expired tokens gracefully', async () => {
-      // Arrange
-      prismaService.userToken.findMany.mockResolvedValue([])
-
-      // Act
-      await service.handleExpiredInvitations()
-
-      // Assert
-      expect(prismaService.invitation.findFirst).not.toHaveBeenCalled()
-      expect(prismaService.invitation.update).not.toHaveBeenCalled()
-      expect(prismaService.userToken.delete).not.toHaveBeenCalled()
-      expect(logger.debug).toHaveBeenCalledWith('Found 0 expired invitation tokens', 'ExpiredInvitationsSchedulerService')
-    })
-
-    it('should handle database errors gracefully', async () => {
-      // Arrange
-      prismaService.userToken.findMany.mockRejectedValue(new Error('Database connection error'))
-
-      // Act
-      await service.handleExpiredInvitations()
-
-      // Assert
-      expect(logger.error).toHaveBeenCalledWith('Error checking for expired invitations: Database connection error', 'ExpiredInvitationsSchedulerService')
-    })
+  beforeEach(async () => {
+    await expiredInvitationsSchedulerServiceTest.setupTest()
   })
+
+  afterEach(async () => {
+    await expiredInvitationsSchedulerServiceTest.cleanupTest()
+  })
+
+  // Run all test suites
+  expiredInvitationsSchedulerServiceTest.testHandleExpiredInvitations()
 })
