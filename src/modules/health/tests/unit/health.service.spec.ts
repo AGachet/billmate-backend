@@ -1,16 +1,22 @@
 /**
  * Resources
  */
-import { Test, TestingModule } from '@nestjs/testing'
-import { HealthCheckService, HealthCheckResult, HealthIndicatorResult, HealthIndicatorStatus } from '@nestjs/terminus'
+import { Provider } from '@nestjs/common'
+import { HealthCheckResult, HealthCheckService, HealthIndicatorResult, HealthIndicatorStatus } from '@nestjs/terminus'
 
 /**
  * Dependencies
  */
+import { Logger } from '@common/services/logger/logger.service'
 import { AppHealthCheck } from '@modules/health/checks/app.health.check'
 import { HealthService } from '@modules/health/services/health.service'
-import { mockChalk, mockWinston } from '@configs/test/unit-mocks-glob'
-import { Logger } from '@common/services/logger/logger.service'
+
+/**
+ * Test infrastructure
+ */
+import { ServiceTestBase } from '@common/tests/unit/base/service-test-base'
+import { mockLogger } from '@common/tests/unit/mocks/service-mocks'
+import { TestAssertions, TestScenario } from '@common/tests/unit/utils/advanced-test-utils'
 
 /**
  * Mocks
@@ -24,7 +30,6 @@ jest.mock('@nestjs/terminus', () => ({
 }))
 
 jest.mock('@modules/health/checks/app.health.check')
-jest.mock('@common/services/logger/logger.service')
 
 /**
  * Test Data
@@ -38,92 +43,129 @@ const mockHealthResult: HealthIndicatorResult = {
 }
 
 /**
- * Declaration
+ * Test implementation using the new infrastructure
  */
-describe('HealthService', () => {
-  let service: HealthService
-  let healthCheckService: jest.Mocked<HealthCheckService>
-  let appHealthCheck: jest.Mocked<AppHealthCheck>
-  let logger: jest.Mocked<Logger>
+class HealthServiceTest extends ServiceTestBase<HealthService> {
+  private healthCheckService: jest.Mocked<HealthCheckService>
+  private appHealthCheck: jest.Mocked<AppHealthCheck>
+  private logger: jest.Mocked<Logger>
+
+  protected getServiceClass() {
+    return HealthService
+  }
+
+  protected getProviders(): Provider[] {
+    return [
+      {
+        provide: HealthCheckService,
+        useValue: {
+          check: jest.fn()
+        }
+      },
+      {
+        provide: AppHealthCheck,
+        useValue: {
+          isHealthy: jest.fn()
+        }
+      },
+      {
+        provide: Logger,
+        useValue: mockLogger
+      }
+    ]
+  }
+
+  protected async customSetup(): Promise<void> {
+    // Get service references
+    this.healthCheckService = this.getService(HealthCheckService)
+    this.appHealthCheck = this.getService(AppHealthCheck)
+    this.logger = this.getService(Logger)
+  }
+
+  /**
+   * Test runHealthChecks functionality
+   */
+  testRunHealthChecks(): void {
+    describe('runHealthChecks', () => {
+      describe('when successful', () => {
+        const successScenario = TestScenario.create('successful health checks', async () => {
+          const mockResult: HealthCheckResult = {
+            status: 'ok',
+            info: {
+              app: {
+                status: 'up' as HealthIndicatorStatus,
+                uptime: 123,
+                timestamp: '2024-03-05T12:00:00.000Z'
+              }
+            },
+            error: {},
+            details: {
+              app: {
+                status: 'up' as HealthIndicatorStatus,
+                uptime: 123,
+                timestamp: '2024-03-05T12:00:00.000Z'
+              }
+            }
+          }
+
+          this.healthCheckService.check.mockResolvedValue(mockResult)
+          this.appHealthCheck.isHealthy.mockResolvedValue(mockHealthResult)
+        })
+
+        it('should run health checks successfully', async () => {
+          await successScenario.execute(async () => {
+            // Act
+            const result = await this.service.runHealthChecks()
+
+            // Assert
+            expect(result).toEqual(
+              expect.objectContaining({
+                status: 'ok',
+                info: expect.any(Object),
+                error: expect.any(Object),
+                details: expect.any(Object)
+              })
+            )
+
+            // Verify
+            expect(this.logger.debug).toHaveBeenCalledWith('Running health checks...', 'HealthService')
+            expect(this.logger.debug).toHaveBeenCalledWith('Health checks passed - Status: ok', 'HealthService')
+          })
+        })
+      })
+
+      describe('when errors occur', () => {
+        const errorScenario = TestScenario.create('health check failure', async () => {
+          const error = new Error('Health check failed')
+          this.healthCheckService.check.mockRejectedValue(error)
+        })
+
+        it('should handle health check failures', async () => {
+          await errorScenario.execute(async () => {
+            // Act & Assert
+            await TestAssertions.assertThrows(() => this.service.runHealthChecks(), Error, 'Health check failed')
+
+            // Verify
+            expect(this.logger.error).toHaveBeenCalledWith('Health checks failed: Health check failed', expect.any(String), 'HealthService')
+          })
+        })
+      })
+    })
+  }
+}
+
+// Execute the tests
+describe('HealthService (Refactored)', () => {
+  const healthServiceTest = new HealthServiceTest()
 
   beforeEach(async () => {
-    // Reset global mocks
-    Object.values(mockChalk).forEach((mock: jest.Mock) => mock.mockClear())
-    Object.values(mockWinston.format).forEach((mock: jest.Mock) => mock.mockClear())
-    mockWinston.createLogger.mockClear()
-
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        HealthService,
-        {
-          provide: HealthCheckService,
-          useValue: {
-            check: jest.fn()
-          }
-        },
-        {
-          provide: AppHealthCheck,
-          useValue: {
-            isHealthy: jest.fn()
-          }
-        },
-        {
-          provide: Logger,
-          useValue: {
-            debug: jest.fn(),
-            error: jest.fn()
-          }
-        }
-      ]
-    }).compile()
-
-    healthCheckService = module.get(HealthCheckService)
-    service = module.get<HealthService>(HealthService)
-    appHealthCheck = module.get(AppHealthCheck)
-    logger = module.get(Logger)
+    await healthServiceTest.setupTest()
   })
 
-  afterEach(() => {
-    jest.clearAllMocks()
+  afterEach(async () => {
+    await healthServiceTest.cleanupTest()
   })
 
-  describe('runHealthChecks', () => {
-    it('should run health checks successfully', async () => {
-      const mockResult: HealthCheckResult = {
-        status: 'ok',
-        info: {
-          app: {
-            status: 'up' as HealthIndicatorStatus,
-            uptime: 123,
-            timestamp: '2024-03-05T12:00:00.000Z'
-          }
-        },
-        error: {},
-        details: {
-          app: {
-            status: 'up' as HealthIndicatorStatus,
-            uptime: 123,
-            timestamp: '2024-03-05T12:00:00.000Z'
-          }
-        }
-      }
-
-      healthCheckService.check.mockResolvedValue(mockResult)
-      appHealthCheck.isHealthy.mockResolvedValue(mockHealthResult)
-
-      const result = await service.runHealthChecks()
-
-      expect(result).toEqual(mockResult)
-      expect(logger.debug).toHaveBeenCalledWith('Running health checks...', 'HealthService')
-      expect(logger.debug).toHaveBeenCalledWith('Health checks passed - Status: ok', 'HealthService')
-    })
-
-    it('should handle health check failures', async () => {
-      const error = new Error('Health check failed')
-      healthCheckService.check.mockRejectedValue(error)
-
-      await expect(service.runHealthChecks()).rejects.toThrow(error)
-      expect(logger.error).toHaveBeenCalledWith('Health checks failed: Health check failed', error.stack || JSON.stringify(error), 'HealthService')
-    })
-  })
+  // Run all test suites
+  healthServiceTest.testRunHealthChecks()
 })
