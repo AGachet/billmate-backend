@@ -149,7 +149,7 @@ jobs:
 
   test-e2e:
     name: Tests - E2E
-    needs: [build, test-code-compliance]
+    needs: [build, test-code-compliance, load-env]
     runs-on: ubuntu-latest
     services:
       postgres:
